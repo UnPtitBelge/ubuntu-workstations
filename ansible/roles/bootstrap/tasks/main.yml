@@ -76,9 +76,13 @@
 - name: Download rustup installer
   ansible.builtin.get_url:
     url: https://sh.rustup.rs
-    dest: "{{ bootstrap_cache }}/install-rustup.sh"
-    mode: "0600"
-  when: not bootstrap_rustup.stat.exists
+    dest: "{{ ansible_facts['env']['HOME'] }}/.cache/workstation-bootstrap/install-rustup.sh"
+    mode: "0755"
+    timeout: 30
+  register: rustup_download
+  until: rustup_download is succeeded
+  retries: 5
+  delay: 10
 
 - name: Install rustup
   ansible.builtin.command:
