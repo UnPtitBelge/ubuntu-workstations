@@ -1,0 +1,84 @@
+---
+# Included with proton_desktop_app describing a verified upstream .deb.
+- name: 'Download verified {{ proton_desktop_app.name }} package'
+  become: true
+  ansible.builtin.get_url:
+    url: '{{ proton_desktop_app.url }}'
+    dest: '/var/cache/ansible/proton/{{ proton_desktop_app.filename }}'
+    checksum: 'sha512:{{ proton_desktop_app.sha512 }}'
+    owner: root
+    group: root
+    mode: '0644'
+    timeout: 45
+
+- name: 'Inspect {{ proton_desktop_app.name }} DEB package name'
+  become: true
+  ansible.builtin.command:
+    argv:
+      - dpkg-deb
+      - --field
+      - '/var/cache/ansible/proton/{{ proton_desktop_app.filename }}'
+      - Package
+  register: proton_deb_package_name
+  changed_when: false
+
+- name: 'Inspect {{ proton_desktop_app.name }} DEB package version'
+  become: true
+  ansible.builtin.command:
+    argv:
+      - dpkg-deb
+      - --field
+      - '/var/cache/ansible/proton/{{ proton_desktop_app.filename }}'
+      - Version
+  register: proton_deb_package_version
+  changed_when: false
+
+- name: 'Verify {{ proton_desktop_app.name }} package release'
+  ansible.builtin.assert:
+    that:
+      - proton_deb_package_name.stdout | trim | length > 0
+      - (proton_deb_package_version.stdout | trim | regex_search('^' ~ (proton_desktop_app.version | regex_escape) ~ '($|[-+~])')) is not none
+    fail_msg: 'Unexpected DEB metadata for {{ proton_desktop_app.name }}; refusing to install.'
+
+- name: 'Read installed {{ proton_desktop_app.name }} version'
+  become: true
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - --show
+      - '--showformat=${Version}'
+      - '{{ proton_deb_package_name.stdout | trim }}'
+  register: proton_installed_version
+  failed_when: false
+  changed_when: false
+
+- name: 'Compare installed {{ proton_desktop_app.name }} with approved release'
+  become: true
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - '{{ proton_installed_version.stdout | trim }}'
+      - ge
+      - '{{ proton_deb_package_version.stdout | trim }}'
+  register: proton_version_ok
+  failed_when: false
+  changed_when: false
+  when: proton_installed_version.rc == 0
+
+- name: 'Install {{ proton_desktop_app.name }} only when missing or older'
+  become: true
+  ansible.builtin.apt:
+    deb: '/var/cache/ansible/proton/{{ proton_desktop_app.filename }}'
+    state: present
+  when: >-
+    proton_installed_version.rc != 0 or
+    (proton_version_ok.rc | default(1)) != 0
+
+- name: 'Report {{ proton_desktop_app.name }} package status'
+  ansible.builtin.debug:
+    msg: >-
+      {{ proton_desktop_app.name }}: installed version
+      {{ proton_installed_version.stdout | trim if proton_installed_version.rc == 0 else 'not previously installed' }};
+      approved baseline {{ proton_deb_package_version.stdout | trim }}.
+      Existing newer versions are preserved.

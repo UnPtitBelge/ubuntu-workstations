@@ -9,6 +9,10 @@ workstation_proton_manage_vpn: false
 workstation_proton_drive_enabled: true
 workstation_proton_drive_version: "0.9.0"
 
+# Proton desktop applications
+workstation_proton_pass_enabled: true
+workstation_proton_mail_enabled: true
+
 workstation_proton_drive_platforms:
   x86_64:
     directory: linux-x64

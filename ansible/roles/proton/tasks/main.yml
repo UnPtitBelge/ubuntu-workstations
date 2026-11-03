@@ -2,3 +2,6 @@
 - name: Configure Proton Drive CLI
   ansible.builtin.import_tasks: drive.yml
   when: workstation_proton_drive_enabled
+
+- name: Manage Proton Pass and Mail desktop applications
+  ansible.builtin.import_tasks: desktop-apps.yml
