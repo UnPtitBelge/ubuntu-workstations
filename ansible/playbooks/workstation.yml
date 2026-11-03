@@ -4,6 +4,7 @@
   gather_facts: true
 
   roles:
+    - hardware
     - base
     - shell
     - bootstrap

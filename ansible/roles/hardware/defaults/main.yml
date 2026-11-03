@@ -1,0 +1,6 @@
+---
+# Detection only. No package, service, or desktop changes.
+workstation_hardware_supported_architectures:
+  - x86_64
+  - aarch64
+workstation_hardware_require_supported_architecture: true

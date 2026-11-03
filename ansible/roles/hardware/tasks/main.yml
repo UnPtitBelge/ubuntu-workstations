@@ -1,0 +1,60 @@
+---
+- name: Validate architecture support
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] in workstation_hardware_supported_architectures
+    fail_msg: >-
+      Unsupported architecture {{ ansible_facts['architecture'] }}.
+      Update workstation_hardware_supported_architectures only after checking
+      the architecture-specific installers used by other roles.
+  when: workstation_hardware_require_supported_architecture | bool
+
+- name: Inspect KVM device
+  ansible.builtin.stat:
+    path: /dev/kvm
+    get_checksum: false
+  register: workstation_hardware_kvm_device
+
+- name: Inspect desktop session bus
+  ansible.builtin.stat:
+    path: "/run/user/{{ ansible_facts['user_uid'] }}/bus"
+    get_checksum: false
+  register: workstation_hardware_session_bus
+
+- name: Look for GNOME Shell owned by the Ansible user
+  ansible.builtin.command:
+    argv:
+      - pgrep
+      - -u
+      - "{{ ansible_facts['user_uid'] | string }}"
+      - -x
+      - gnome-shell
+  register: workstation_hardware_gnome_process
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Record workstation hardware and session capabilities
+  ansible.builtin.set_fact:
+    workstation_hardware_architecture: "{{ ansible_facts['architecture'] }}"
+    workstation_hardware_virtualization_role: "{{ ansible_facts['virtualization_role'] | default('unknown') }}"
+    workstation_hardware_virtualization_type: "{{ ansible_facts['virtualization_type'] | default('unknown') }}"
+    workstation_hardware_has_kvm: >-
+      {{ (workstation_hardware_kvm_device.stat.exists | default(false))
+         and (workstation_hardware_kvm_device.stat.ischr | default(false)) }}
+    workstation_hardware_has_session_bus: >-
+      {{ (workstation_hardware_session_bus.stat.exists | default(false))
+         and (workstation_hardware_session_bus.stat.issock | default(false)) }}
+    workstation_hardware_has_gnome_session: >-
+      {{ (workstation_hardware_gnome_process.rc == 0)
+         and (workstation_hardware_session_bus.stat.issock | default(false)) }}
+
+- name: Show detected capabilities
+  ansible.builtin.debug:
+    msg:
+      architecture: "{{ workstation_hardware_architecture }}"
+      virtualization_role: "{{ workstation_hardware_virtualization_role }}"
+      virtualization_type: "{{ workstation_hardware_virtualization_type }}"
+      kvm_device_present: "{{ workstation_hardware_has_kvm }}"
+      session_bus_present: "{{ workstation_hardware_has_session_bus }}"
+      gnome_session_present: "{{ workstation_hardware_has_gnome_session }}"
