@@ -1,0 +1,86 @@
+---
+# Resource Monitor 28 for GNOME Shell 50.
+# Runs as the desktop user, before the existing GNOME extension-management tasks.
+- name: Ensure Resource Monitor installation dependency is available
+  become: true
+  ansible.builtin.apt:
+    name: git
+    state: present
+
+- name: Create Resource Monitor source cache and extension directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ ansible_facts['env']['HOME'] }}/.cache/ansible/gnome-extensions"
+    - "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n"
+
+- name: Check out Resource Monitor release 28
+  ansible.builtin.git:
+    repo: https://github.com/0ry0n/Resource_Monitor.git
+    dest: "{{ ansible_facts['env']['HOME'] }}/.cache/ansible/gnome-extensions/resource-monitor-src"
+    version: '28'
+    update: false
+    depth: 1
+  register: workstation_gnome_resource_monitor_checkout
+  when: not ansible_check_mode
+
+- name: Copy Resource Monitor extension files
+  ansible.builtin.copy:
+    src: "{{ ansible_facts['env']['HOME'] }}/.cache/ansible/gnome-extensions/resource-monitor-src/Resource_Monitor@Ory0n/"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/"
+    remote_src: true
+    mode: preserve
+  register: workstation_gnome_resource_monitor_copy
+  when: not ansible_check_mode
+
+- name: Inspect Resource Monitor compiled schema
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas/gschemas.compiled"
+  register: workstation_gnome_resource_monitor_schema
+  when: not ansible_check_mode
+
+- name: Compile Resource Monitor schema when files changed or missing
+  ansible.builtin.command:
+    argv:
+      - glib-compile-schemas
+      - "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas"
+  when:
+    - not ansible_check_mode
+    - workstation_gnome_resource_monitor_copy is changed or not workstation_gnome_resource_monitor_schema.stat.exists
+
+- name: Inspect Resource Monitor preferences
+  ansible.builtin.command:
+    argv:
+      - gsettings
+      - --schemadir
+      - "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas"
+      - get
+      - org.gnome.shell.extensions.resource-monitor
+      - "{{ item.key }}"
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_resource_monitor_settings }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: workstation_gnome_resource_monitor_current
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Apply Resource Monitor preferences only when different
+  ansible.builtin.command:
+    argv:
+      - gsettings
+      - --schemadir
+      - "{{ ansible_facts['env']['HOME'] }}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas"
+      - set
+      - org.gnome.shell.extensions.resource-monitor
+      - "{{ item.item.key }}"
+      - "{{ item.item.value }}"
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_resource_monitor_current.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when:
+    - not ansible_check_mode
+    - item.stdout | trim != item.item.value

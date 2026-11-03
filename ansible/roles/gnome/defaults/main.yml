@@ -32,7 +32,7 @@ workstation_gnome_enabled_extensions:
   - ubuntu-appindicators@ubuntu.com
   - ubuntu-dock@ubuntu.com
   - web-search-provider@ubuntu.com
-  - system-monitor@gnome-shell-extensions.gcampax.github.com
+  - Resource_Monitor@Ory0n
 
 # GVariant representations; quote string values as single-quoted GVariants.
 workstation_gnome_settings:
@@ -61,6 +61,21 @@ workstation_gnome_settings:
   - { schema: org.gnome.shell.extensions.dash-to-dock, key: extend-height, value: 'false' }
   - { schema: org.gnome.shell.extensions.dash-to-dock, key: show-trash, value: 'false' }
   - { schema: org.gnome.shell.extensions.dash-to-dock, key: show-mounts, value: 'false' }
+
+workstation_gnome_resource_monitor_settings:
+  - { key: refreshtime, value: '2' }
+  - { key: extensionposition, value: "'right'" }
+  - { key: iconsstatus, value: 'true' }
+  - { key: cpustatus, value: 'true' }
+  - { key: ramstatus, value: 'true' }
+  - { key: ramunit, value: "'perc'" }
+  - { key: diskstatsstatus, value: 'false' }
+  - { key: diskspacestatus, value: 'false' }
+  - { key: gpustatus, value: 'false' }
+  - { key: netethstatus, value: 'true' }
+  - { key: netwlanstatus, value: 'true' }
+  - { key: netautohidestatus, value: 'true' }
+  - { key: netunit, value: "'bytes'" }
 
 # A reproducible shortcut; overrides user's custom shortcuts list if enabled.
 workstation_gnome_manage_ghostty_shortcut: true

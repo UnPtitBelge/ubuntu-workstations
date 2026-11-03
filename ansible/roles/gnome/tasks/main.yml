@@ -9,6 +9,8 @@
   ansible.builtin.import_tasks: settings.yml
 - name: Install and activate wallpaper
   ansible.builtin.import_tasks: wallpaper.yml
+- name: Install and configure top-bar Resource Monitor
+  ansible.builtin.import_tasks: resource-monitor.yml
 - name: Manage GNOME extensions
   ansible.builtin.import_tasks: extensions.yml
 - name: Manage GNOME shortcuts
