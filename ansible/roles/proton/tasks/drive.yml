@@ -1,0 +1,49 @@
+---
+- name: Validate supported Proton Drive architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] in workstation_proton_drive_platforms
+    fail_msg: >-
+      Unsupported Proton Drive architecture:
+      {{ ansible_facts['architecture'] }}
+
+- name: Select Proton Drive download configuration
+  ansible.builtin.set_fact:
+    proton_drive_platform: >-
+      {{ workstation_proton_drive_platforms[ansible_facts['architecture']] }}
+
+- name: Install Proton Drive runtime dependencies
+  become: true
+  ansible.builtin.apt:
+    name:
+      - libsecret-1-0
+      - gnome-keyring
+    state: present
+
+- name: Ensure local binary directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Install verified Proton Drive CLI
+  ansible.builtin.get_url:
+    url: >-
+      https://proton.me/download/drive/cli/{{ workstation_proton_drive_version }}/{{ proton_drive_platform.directory | trim }}/proton-drive
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/proton-drive"
+    mode: "0755"
+    checksum: "sha512:{{ proton_drive_platform.sha512 | trim }}"
+
+- name: Verify Proton Drive CLI
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts['env']['HOME'] }}/.local/bin/proton-drive"
+      - version
+  register: proton_drive_version_result
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Report Proton Drive CLI version
+  ansible.builtin.debug:
+    var: proton_drive_version_result.stdout
+  when: not ansible_check_mode
