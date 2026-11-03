@@ -1,0 +1,221 @@
+---
+# Read-only workstation audit. Run as the logged-in desktop user.
+- name: Validate Ubuntu workstation
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    audit_enforce: false
+    audit_expected_distribution: Ubuntu
+    audit_expected_release: '26.04'
+    audit_expected_gtk_theme: Yaru-blue-dark
+    audit_expected_icon_theme: Yaru-blue-dark
+    audit_expected_color_scheme: prefer-dark
+    audit_expected_extension: Resource_Monitor@Ory0n
+    audit_required_commands:
+      - fish
+      - ghostty
+      - git
+      - docker
+      - containerlab
+      - multipass
+      - syncthing
+      - mise
+      - uv
+      - rustup
+      - node
+      - python3
+      - gsettings
+    audit_optional_commands:
+      - proton-drive
+      - cargo
+      - qemu-system-x86_64
+      - ansible-playbook
+    audit_path: >-
+      {{ ansible_facts['env']['HOME'] }}/.local/bin:
+      {{ ansible_facts['env']['HOME'] }}/.cargo/bin:
+      {{ ansible_facts['env']['HOME'] }}/.local/share/mise/shims:
+      /usr/local/bin:/usr/bin:/bin:/snap/bin
+    audit_user_bus: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+
+  tasks:
+    - name: Check required commands exist
+      ansible.builtin.shell: "command -v {{ item | quote }}"
+      args:
+        executable: /bin/sh
+      environment:
+        PATH: "{{ audit_path | regex_replace('\\s+', '') }}"
+      loop: "{{ audit_required_commands }}"
+      register: audit_required_results
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Check optional commands exist
+      ansible.builtin.shell: "command -v {{ item | quote }}"
+      args:
+        executable: /bin/sh
+      environment:
+        PATH: "{{ audit_path | regex_replace('\\s+', '') }}"
+      loop: "{{ audit_optional_commands }}"
+      register: audit_optional_results
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect installed tool versions
+      ansible.builtin.command:
+        argv: "{{ item.argv }}"
+      environment:
+        PATH: "{{ audit_path | regex_replace('\\s+', '') }}"
+      loop:
+        - { label: fish, argv: [fish, --version] }
+        - { label: ghostty, argv: [ghostty, --version] }
+        - { label: mise, argv: [mise, --version] }
+        - { label: uv, argv: [uv, --version] }
+        - { label: rustup, argv: [rustup, --version] }
+        - { label: containerlab, argv: [containerlab, version] }
+        - { label: multipass, argv: [multipass, version] }
+        - { label: syncthing, argv: [syncthing, --version] }
+        - { label: proton-drive, argv: [proton-drive, version] }
+        - { label: docker-compose, argv: [docker, compose, version] }
+        - { label: docker-buildx, argv: [docker, buildx, version] }
+        - { label: gnome-shell, argv: [gnome-shell, --version] }
+      loop_control:
+        label: "{{ item.label }}"
+      register: audit_versions
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect Docker daemon status
+      ansible.builtin.command:
+        argv: [systemctl, is-active, docker.service]
+      register: audit_docker
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect Syncthing user service status
+      ansible.builtin.command:
+        argv: [systemctl, --user, is-active, syncthing.service]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_syncthing
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect Syncthing user service enablement
+      ansible.builtin.command:
+        argv: [systemctl, --user, is-enabled, syncthing.service]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_syncthing_enabled
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect GNOME appearance
+      ansible.builtin.command:
+        argv: [gsettings, get, org.gnome.desktop.interface, "{{ item }}"]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      loop: [gtk-theme, icon-theme, color-scheme, accent-color]
+      register: audit_appearance
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect GNOME extensions
+      ansible.builtin.command:
+        argv: [gnome-extensions, list, --enabled]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_extensions
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect GNOME custom keyboard shortcut list
+      ansible.builtin.command:
+        argv: [gsettings, get, org.gnome.settings-daemon.plugins.media-keys, custom-keybindings]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_shortcuts
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect Proton Debian packages
+      ansible.builtin.command:
+        argv: [dpkg-query, -W, '*proton*']
+      register: audit_proton_packages
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect shared Syncthing directory
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/Sync"
+      register: audit_sync_dir
+
+    - name: Inspect QEMU KVM device
+      ansible.builtin.stat:
+        path: /dev/kvm
+      register: audit_kvm
+
+    - name: Compute audit findings
+      ansible.builtin.set_fact:
+        audit_missing_required: >-
+          {{ audit_required_results.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}
+        audit_missing_optional: >-
+          {{ audit_optional_results.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}
+        audit_gnome_gtk: >-
+          {{ (audit_appearance.results | selectattr('item', 'equalto', 'gtk-theme') | first).stdout | default('unavailable') }}
+        audit_gnome_icons: >-
+          {{ (audit_appearance.results | selectattr('item', 'equalto', 'icon-theme') | first).stdout | default('unavailable') }}
+        audit_gnome_scheme: >-
+          {{ (audit_appearance.results | selectattr('item', 'equalto', 'color-scheme') | first).stdout | default('unavailable') }}
+        audit_extension_present: >-
+          {{ audit_extensions.rc == 0 and audit_expected_extension in audit_extensions.stdout_lines }}
+
+    - name: Display workstation audit report
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }} | {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "Tool versions: {{ audit_versions.results | map(attribute='item.label') | zip(audit_versions.results | map(attribute='stdout') | list) | map('join', ': ') | list }}"
+          - "Required commands missing: {{ audit_missing_required | join(', ') if audit_missing_required else 'none' }}"
+          - "Optional commands missing: {{ audit_missing_optional | join(', ') if audit_missing_optional else 'none' }}"
+          - "Docker daemon: {{ audit_docker.stdout | default('unavailable', true) }}"
+          - "Syncthing user service: {{ audit_syncthing.stdout | default('unavailable', true) }} ({{ audit_syncthing_enabled.stdout | default('unknown', true) }})"
+          - "GTK theme: {{ audit_gnome_gtk }} | Icons: {{ audit_gnome_icons }} | Color scheme: {{ audit_gnome_scheme }}"
+          - "Resource Monitor enabled: {{ audit_extension_present }}"
+          - "GNOME shortcut paths: {{ audit_shortcuts.stdout | default('unavailable', true) }}"
+          - "Syncthing directory exists: {{ audit_sync_dir.stat.isdir | default(false) }}"
+          - "KVM device exists: {{ audit_kvm.stat.exists | default(false) }}"
+          - "Proton DEB packages: {{ audit_proton_packages.stdout_lines | default([]) }}"
+
+    - name: Enforce core workstation requirements when requested
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == audit_expected_distribution
+          - ansible_facts['distribution_version'] == audit_expected_release
+          - audit_missing_required | length == 0
+          - audit_docker.stdout == 'active'
+          - audit_syncthing.stdout == 'active'
+          - audit_syncthing_enabled.stdout == 'enabled'
+          - audit_sync_dir.stat.isdir | default(false)
+          - audit_gnome_gtk == "'" ~ audit_expected_gtk_theme ~ "'"
+          - audit_gnome_icons == "'" ~ audit_expected_icon_theme ~ "'"
+          - audit_gnome_scheme == "'" ~ audit_expected_color_scheme ~ "'"
+          - audit_extension_present | bool
+        fail_msg: 'Workstation audit failed. Review the report above.'
+        success_msg: 'All enforced workstation checks passed.'
+      when: audit_enforce | bool
