@@ -1,0 +1,21 @@
+# Ansible
+*.retry
+*.log
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Python
+.venv/
+__pycache__/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
