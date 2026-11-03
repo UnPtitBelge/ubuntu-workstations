@@ -1,15 +1,31 @@
-# Portable Fish + Ghostty + Starship workstation baseline
+# Phase 22 — Read-only Ubuntu workstation audit
 
-Copy `dotfiles/` and `ansible/roles/shell/tasks/main.yml` into matching locations in your existing `ubuntu-workstations` repository. These replace the current shell role; keep your existing inventory, playbook and group variables.
+Extract this package at the repository root. It **adds** `ansible/playbooks/validate-workstation.yml` and does not alter existing roles or the provisioning playbook.
 
-Before deploying, inspect diffs and back up existing files. The role backs up files it overwrites, but does not remove unmanaged Fish files. **Especially inspect `~/.config/fish/conf.d/rustup.fish` and all other old init files for duplicate setup.**
+```fish
+cd ~/Projects/ubuntu-workstations/ansible
+ansible-playbook playbooks/validate-workstation.yml --syntax-check
+ansible-playbook playbooks/validate-workstation.yml
+```
 
-The deployment assumes Ansible connects as the target regular user and uses `become` only for APT.
+If your inventory is not automatically loaded from `ansible.cfg`, pass `-i inventory/hosts.yml`.
 
-The profile preserves the source WhiteSur palette, Ghostty splits, Starship modules and core Fish shortcuts. It removes pyenv fragments, a forced TERM, the hardcoded username, and the quick-terminal binding that GNOME does not support.
+The audit is **read-only**. It checks software visibility in a path that includes user-managed mise, uv and rustup binaries; service status; GNOME appearance and enabled extensions; Syncthing folder; KVM availability; and installed Proton DEB packages. It deliberately does not contact Proton APIs, access passwords, inspect Syncthing's credentials, or modify any files or services.
 
-Some Fish aliases from the original complete `config.fish` were not available in this specific archive. The new file is a portable baseline rather than a guaranteed exhaustive transcription. Compare against the current configuration before replacement.
+Missing commands and unavailable services are shown as findings but do not fail the default audit. To make it a gating check:
 
-The Ghostty font requires JetBrainsMono Nerd Font Mono installed on both workstations; otherwise change the font-family setting to a font available on both.
+```fish
+ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true
+```
 
-Validate with `fish -n path/to/config.fish`, `python3 -m tomllib` for the TOML files, and Ghostty's `+validate-config` command if supported by your installed build. Test Ansible with `--check --diff -K` first.
+Edit the variables at the top of the audit playbook if you customize your desktop theme or required tools. The audit checks only shortcut **paths**, not whether the shortcuts launch the expected command; we deliberately avoid invoking applications. It checks the installed Proton DEB package list, not whether you can sign in.
+
+Run it as the logged-in desktop user, while a GNOME session is active. Commands probing GUI/session services may report unavailable if run over headless SSH. The playbook uses read-only `command`/`shell` probes, with `changed_when: false` and `check_mode: false` to ensure they run even under `--check`; no state-changing Ansible modules are used. In an Ansible recap, fact-gathering may create local temporary files as Ansible normally does, but the managed workstation configuration is not changed.
+
+To check it after customization:
+
+```fish
+ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true
+```
+
+Commit only after the output matches your intended workstation configuration.
