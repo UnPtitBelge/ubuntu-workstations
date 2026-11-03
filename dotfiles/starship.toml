@@ -1,0 +1,21 @@
+# Simple, legible prompt: location, Git context, command status.
+add_newline = true
+format = '$directory$git_branch$git_status$python$nodejs$rust$java$cmd_duration$line_break$character'
+
+[directory]
+truncation_length = 3
+truncation_symbol = '…/'
+
+[git_branch]
+format = '[$symbol$branch]($style) '
+
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+
+[cmd_duration]
+min_time = 3000
+format = '[took $duration]($style) '
+
+[character]
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'

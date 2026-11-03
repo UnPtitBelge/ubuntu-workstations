@@ -1,0 +1,36 @@
+# Ghostty: default colors, minimal UI changes, useful shortcuts.
+# Fish is launched explicitly to avoid relying on the login shell setting.
+command = /usr/bin/fish
+font-size = 13
+scrollback-limit = 10000
+
+# Fish word-editing compatibility. If Ctrl+Delete/Backspace still fail,
+# use fish_key_reader to inspect the actual sequence on your keyboard.
+# Preserve Ctrl+Delete for terminal applications
+# Send the traditional Ctrl+Delete escape sequence
+keybind = ctrl+delete=csi:3;5~
+keybind = ctrl+backspace=text:\x1b\x7f
+
+# Splits
+keybind = ctrl+shift+d=new_split:right
+keybind = ctrl+shift+e=new_split:down
+keybind = ctrl+shift+h=goto_split:left
+keybind = ctrl+shift+l=goto_split:right
+keybind = ctrl+shift+k=goto_split:top
+keybind = ctrl+shift+j=goto_split:bottom
+keybind = ctrl+shift+alt+h=resize_split:left,20
+keybind = ctrl+shift+alt+l=resize_split:right,20
+keybind = ctrl+shift+alt+k=resize_split:up,20
+keybind = ctrl+shift+alt+j=resize_split:down,20
+
+# Tabs and windows
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_surface
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+keybind = ctrl+shift+n=new_window
+keybind = f11=toggle_fullscreen
+
+# Clipboard
+copy-on-select = clipboard
+clipboard-paste-protection = true
