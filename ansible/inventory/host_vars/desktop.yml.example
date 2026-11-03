@@ -1,0 +1,12 @@
+---
+# Future Ubuntu desktop
+# Copy to desktop.yml when the machine is available.
+
+workstation_device_class: desktop
+workstation_device_name: ""
+
+# Hardware-dependent configuration will be added
+# after inspecting the desktop.
+
+workstation_backup_enabled: true
+workstation_syncthing_enabled: true
