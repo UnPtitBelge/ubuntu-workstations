@@ -10,4 +10,4 @@ workstation_syncthing_enabled: true
 # Prepare Proton backups, but do not schedule
 # them until authentication and restore testing succeed.
 workstation_backup_enabled: true
-workstation_backup_timer_enabled: false
+workstation_backup_timer_enabled: true
