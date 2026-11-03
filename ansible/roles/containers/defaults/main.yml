@@ -7,3 +7,8 @@ workstation_docker_packages:
   - docker-compose-plugin
 
 workstation_docker_manage_service: true
+
+# Containerlab
+workstation_containerlab_version: "0.82.0"
+
+workstation_containerlab_architecture: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(ansible_facts['architecture'], 'unsupported') }}"

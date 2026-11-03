@@ -84,21 +84,79 @@
       - "{{ workstation_compose_version.stdout }}"
       - "{{ workstation_buildx_version.stdout }}"
 
-- name: Check Containerlab installation
+# ─────────────────────────────────────────────
+# Containerlab
+# ─────────────────────────────────────────────
+
+- name: Check installed Containerlab package
   ansible.builtin.command:
     argv:
+      - dpkg-query
+      - -W
+      - "-f=${Version}"
       - containerlab
-      - version
-  register: workstation_containerlab_version
+  register: containerlab_installed
   changed_when: false
   failed_when: false
   check_mode: false
 
-- name: Display Containerlab status
+- name: Verify supported architecture
+  ansible.builtin.assert:
+    that:
+      - workstation_containerlab_architecture in ['amd64', 'arm64']
+    success_msg: >-
+      Containerlab architecture: {{ workstation_containerlab_architecture }}
+    fail_msg: >-
+      Unsupported architecture:
+      {{ ansible_facts['architecture'] }}
+      (mapped to {{ workstation_containerlab_architecture }})
+
+- name: Prevent unintended Containerlab upgrades or downgrades
+  ansible.builtin.assert:
+    that:
+      - containerlab_installed.rc != 0 or
+        containerlab_installed.stdout | trim ==
+        workstation_containerlab_version
+    fail_msg: >-
+      Containerlab {{ containerlab_installed.stdout | trim }}
+      is installed, but {{ workstation_containerlab_version }}
+      is requested. Review the version change before proceeding.
+
+- name: Download Containerlab Debian package
+  become: true
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/srl-labs/containerlab/releases/download/v{{ workstation_containerlab_version }}/containerlab_{{ workstation_containerlab_version }}_linux_{{ workstation_containerlab_architecture }}.deb
+    dest: >-
+      /var/cache/containerlab_{{ workstation_containerlab_version }}_linux_{{ workstation_containerlab_architecture }}.deb
+    mode: "0644"
+  when:
+    - containerlab_installed.rc != 0
+
+- name: Install Containerlab
+  become: true
+  ansible.builtin.apt:
+    deb: >-
+      /var/cache/containerlab_{{ workstation_containerlab_version }}_linux_{{ workstation_containerlab_architecture }}.deb
+    state: present
+  when:
+    - containerlab_installed.rc != 0
+    - not ansible_check_mode
+
+- name: Verify Containerlab installation
+  ansible.builtin.command:
+    argv:
+      - containerlab
+      - version
+  register: containerlab_version
+  changed_when: false
+  when:
+    - containerlab_installed.rc == 0
+    - not ansible_check_mode
+
+- name: Display Containerlab version
   ansible.builtin.debug:
-    msg: >-
-      {{
-        workstation_containerlab_version.stdout
-        if workstation_containerlab_version.rc == 0
-        else 'Containerlab is not installed or could not be executed.'
-      }}
+    var: containerlab_version.stdout_lines
+  when:
+    - containerlab_version is defined
+    - containerlab_version.stdout_lines is defined
