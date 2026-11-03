@@ -1,0 +1,36 @@
+---
+- name: Install shell utilities
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_shell_packages }}"
+    state: present
+
+- name: Create user configuration directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - fish
+    - ghostty
+
+- name: Deploy Fish configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../dotfiles/fish/"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/fish/"
+    mode: preserve
+    backup: true
+
+- name: Deploy Ghostty configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../dotfiles/ghostty/config.ghostty"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/ghostty/config.ghostty"
+    mode: "0644"
+    backup: true
+
+- name: Deploy Starship configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../dotfiles/starship.toml"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/starship.toml"
+    mode: "0644"
+    backup: true
