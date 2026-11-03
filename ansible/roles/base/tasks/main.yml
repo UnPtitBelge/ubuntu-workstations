@@ -1,0 +1,14 @@
+---
+- name: Install workstation base packages
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install development toolchain
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_development_packages }}"
+    state: present

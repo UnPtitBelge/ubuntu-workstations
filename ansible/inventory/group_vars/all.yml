@@ -1,0 +1,38 @@
+---
+workstation_base_packages:
+  - ca-certificates
+  - curl
+  - wget
+  - git
+  - fish
+  - jq
+  - rsync
+  - stow
+  - unzip
+  - zip
+  - htop
+  - btop
+  - tree
+
+workstation_development_packages:
+  - build-essential
+  - cmake
+  - ninja-build
+  - gdb
+  - pkg-config
+
+# Shell configuration
+
+workstation_shell_packages:
+  - fish
+  - fzf
+  - ripgrep
+  - fd-find
+  - bat
+  - eza
+  - tmux
+  - htop
+  - btop
+  - zoxide
+  - starship
+  - glow
