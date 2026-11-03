@@ -1,0 +1,75 @@
+---
+- name: Install QEMU utilities
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_virtualization_packages }}"
+    state: present
+
+- name: Ensure Snap support is installed
+  become: true
+  ansible.builtin.apt:
+    name: snapd
+    state: present
+
+- name: Check whether Multipass Snap is installed
+  ansible.builtin.command:
+    argv:
+      - snap
+      - list
+      - multipass
+  register: workstation_multipass_snap
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Multipass if missing
+  become: true
+  ansible.builtin.command:
+    argv:
+      - snap
+      - install
+      - multipass
+      - "--channel={{ workstation_multipass_channel }}"
+  when:
+    - workstation_multipass_snap.rc != 0
+    - not ansible_check_mode
+
+- name: Report missing Multipass during check mode
+  ansible.builtin.debug:
+    msg: "Multipass would be installed during a normal run."
+  when:
+    - workstation_multipass_snap.rc != 0
+    - ansible_check_mode
+
+- name: Check KVM device availability
+  ansible.builtin.stat:
+    path: /dev/kvm
+  register: workstation_kvm
+
+- name: Report KVM status
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'KVM device detected.'
+        if workstation_kvm.stat.exists
+        else 'No /dev/kvm device detected. Check hardware virtualization support.'
+      }}
+
+- name: Verify Multipass version
+  ansible.builtin.command:
+    argv:
+      - multipass
+      - version
+  register: workstation_multipass_version
+  changed_when: false
+  check_mode: false
+  when:
+    - workstation_multipass_snap.rc == 0
+    - not ansible_check_mode
+
+- name: Display Multipass version
+  ansible.builtin.debug:
+    var: workstation_multipass_version.stdout_lines
+  when:
+    - workstation_multipass_version is defined
+    - workstation_multipass_version.stdout_lines is defined

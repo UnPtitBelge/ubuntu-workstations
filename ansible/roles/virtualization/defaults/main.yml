@@ -1,0 +1,9 @@
+---
+# Install QEMU utilities for standalone virtualization work.
+# Multipass itself manages its own QEMU backend.
+workstation_virtualization_packages:
+  - qemu-system-x86
+  - qemu-utils
+
+# Install Multipass from Canonical's stable Snap channel.
+workstation_multipass_channel: latest/stable
