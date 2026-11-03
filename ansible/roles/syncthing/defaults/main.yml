@@ -8,3 +8,5 @@ workstation_syncthing_service_enabled: true
 
 # Do not configure synchronization folders yet.
 # Each workstation retains its own device identity.
+
+workstation_syncthing_shared_directory: "{{ ansible_facts['env']['HOME'] }}/Sync"
