@@ -1,0 +1,52 @@
+---
+- name: Check Ghostty executable for GNOME shortcut
+  ansible.builtin.command: { argv: [which, ghostty] }
+  changed_when: false
+  check_mode: false
+  register: workstation_gnome_ghostty
+  when: workstation_gnome_manage_ghostty_shortcut
+
+- name: Ensure Ghostty exists before binding shortcut
+  ansible.builtin.assert:
+    that: [workstation_gnome_ghostty.rc == 0]
+    fail_msg: 'Ghostty not found in PATH; install it before enabling the launcher shortcut.'
+  when: workstation_gnome_manage_ghostty_shortcut
+
+- name: Define Ghostty custom shortcut keys
+  ansible.builtin.set_fact:
+    workstation_gnome_shortcut_settings:
+      - schema: org.gnome.settings-daemon.plugins.media-keys
+        key: custom-keybindings
+        value: "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"
+      - schema: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/'
+        key: name
+        value: "'Ghostty'"
+      - schema: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/'
+        key: command
+        value: "'ghostty'"
+      - schema: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/'
+        key: binding
+        value: "'{{ workstation_gnome_ghostty_binding }}'"
+  when: workstation_gnome_manage_ghostty_shortcut
+
+- name: Read shortcut values
+  ansible.builtin.command:
+    argv: [gsettings, get, "{{ item.schema }}", "{{ item.key }}"]
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_shortcut_settings | default([]) }}"
+  loop_control: { label: "{{ item.key }}" }
+  register: workstation_gnome_shortcut_current
+  changed_when: false
+  check_mode: false
+  when: workstation_gnome_manage_ghostty_shortcut
+
+- name: Configure Ghostty launcher shortcut
+  ansible.builtin.command:
+    argv: [gsettings, set, "{{ item.item.schema }}", "{{ item.item.key }}", "{{ item.item.value }}"]
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_shortcut_current.results | default([]) }}"
+  loop_control: { label: "{{ item.item.key }}" }
+  when:
+    - workstation_gnome_manage_ghostty_shortcut
+    - not ansible_check_mode
+    - item.stdout | trim != item.item.value

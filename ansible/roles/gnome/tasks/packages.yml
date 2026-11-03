@@ -1,0 +1,6 @@
+---
+- name: Install Yaru, icons, fonts and system extensions
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_gnome_packages }}"
+    state: present

@@ -1,110 +1,15 @@
 ---
-- name: Install GNOME extensions
-  become: true
-  ansible.builtin.apt:
-    name: "{{ workstation_gnome_packages }}"
-    state: present
-
-- name: Define GNOME environment
-  ansible.builtin.set_fact:
-    gnome_home: "{{ ansible_facts['env']['HOME'] }}"
-    gnome_runtime: "/run/user/{{ ansible_facts['user_uid'] }}"
-
-- name: Check GNOME session bus
-  ansible.builtin.stat:
-    path: "{{ gnome_runtime }}/bus"
-  register: gnome_bus
-
-- name: Require an active desktop session
-  ansible.builtin.assert:
-    that:
-      - gnome_bus.stat.exists
-    fail_msg: "Log into GNOME before running this role."
-
-- name: Create wallpaper directory
-  ansible.builtin.file:
-    path: "{{ gnome_home }}/.local/share/backgrounds"
-    state: directory
-    mode: "0755"
-
-- name: Deploy wallpaper
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/wallpapers/{{ workstation_wallpaper_filename }}"
-    dest: "{{ gnome_home }}/.local/share/backgrounds/{{ workstation_wallpaper_filename }}"
-    mode: "0644"
-
-- name: Check available GNOME schemas
-  ansible.builtin.command:
-    argv:
-      - gsettings
-      - list-schemas
-  register: gnome_schemas
-  changed_when: false
-  check_mode: false
-
-- name: Verify required schemas exist
-  ansible.builtin.assert:
-    that:
-      - item.schema in gnome_schemas.stdout_lines
-    fail_msg: "GNOME schema not installed: {{ item.schema }}"
-  loop: "{{ workstation_gnome_settings }}"
-  loop_control:
-    label: "{{ item.schema }}"
-
-- name: Read current GNOME settings
-  ansible.builtin.command:
-    argv:
-      - gsettings
-      - get
-      - "{{ item.schema }}"
-      - "{{ item.key }}"
-  loop: "{{ workstation_gnome_settings }}"
-  register: gnome_current_settings
-  changed_when: false
-  check_mode: false
-
-- name: Apply GNOME settings
-  ansible.builtin.command:
-    argv:
-      - gsettings
-      - set
-      - "{{ item.item.schema }}"
-      - "{{ item.item.key }}"
-      - "{{ item.item.value }}"
-  loop: "{{ gnome_current_settings.results }}"
-  loop_control:
-    label: "{{ item.item.schema }} {{ item.item.key }}"
-  when:
-    - item.stdout | trim != item.item.value
-    - not ansible_check_mode
-
-- name: Read wallpaper settings
-  ansible.builtin.command:
-    argv:
-      - gsettings
-      - get
-      - org.gnome.desktop.background
-      - "{{ item }}"
-  loop:
-    - picture-uri
-    - picture-uri-dark
-  register: gnome_current_wallpapers
-  changed_when: false
-  check_mode: false
-
-- name: Configure wallpaper
-  ansible.builtin.command:
-    argv:
-      - gsettings
-      - set
-      - org.gnome.desktop.background
-      - "{{ item.item }}"
-      - "file://{{ gnome_home }}/.local/share/backgrounds/{{ workstation_wallpaper_filename }}"
-  loop: "{{ gnome_current_wallpapers.results }}"
-  when:
-    - >-
-      item.stdout | trim !=
-      ("'file://" ~ gnome_home ~
-       "/.local/share/backgrounds/" ~
-       workstation_wallpaper_filename ~ "'")
-    - not ansible_check_mode
+- name: Preflight GNOME desktop
+  ansible.builtin.import_tasks: preflight.yml
+- name: Install GNOME design dependencies
+  ansible.builtin.import_tasks: packages.yml
+- name: Validate selected GNOME theme assets
+  ansible.builtin.import_tasks: validate.yml
+- name: Apply GNOME look, dock and productivity preferences
+  ansible.builtin.import_tasks: settings.yml
+- name: Install and activate wallpaper
+  ansible.builtin.import_tasks: wallpaper.yml
+- name: Manage GNOME extensions
+  ansible.builtin.import_tasks: extensions.yml
+- name: Manage GNOME shortcuts
+  ansible.builtin.import_tasks: shortcuts.yml

@@ -1,100 +1,67 @@
 ---
-# Wallpaper filename inside assets/wallpapers/
-# Change this if your existing image uses a different filename.
-workstation_wallpaper_filename: desktop.png
+# Designed for Ubuntu 26.04 / GNOME 50, running locally as the desktop user.
+workstation_gnome_expected_major: '50'
+
+# Selected desktop theme assets
+workstation_gnome_gtk_theme: Yaru-blue-dark
+workstation_gnome_icon_theme: Yaru-blue-dark
+workstation_gnome_cursor_theme: Yaru
 
 workstation_gnome_packages:
+  - yaru-theme-gtk
+  - yaru-theme-icon
+  - yaru-theme-gnome-shell
+  - adwaita-icon-theme
+  - hicolor-icon-theme
+  - fonts-ubuntu
+  - gnome-shell-ubuntu-extensions
   - gnome-shell-extension-system-monitor
 
-# Shared desktop settings.
-# Values use GVariant syntax, as expected by gsettings.
+# Exact shared appearance. Unlike a theme reset, these are deliberate choices.
+
+# Supply this asset in the repository, then set enabled=true.
+workstation_gnome_wallpaper_enabled: false
+workstation_gnome_wallpaper_filename: desktop.png
+
+# One top-bar monitor, Ubuntu integration extensions, no DING desktop icons.
+# List is intentionally explicit to give the same enabled extensions on both PCs.
+workstation_gnome_enabled_extensions:
+  - snapd-prompting@canonical.com
+  - snapd-search-provider@canonical.com
+  - tiling-assistant@ubuntu.com
+  - ubuntu-appindicators@ubuntu.com
+  - ubuntu-dock@ubuntu.com
+  - web-search-provider@ubuntu.com
+  - system-monitor@gnome-shell-extensions.gcampax.github.com
+
+# GVariant representations; quote string values as single-quoted GVariants.
 workstation_gnome_settings:
-  # Appearance
-  - schema: org.gnome.desktop.interface
-    key: color-scheme
-    value: "'prefer-dark'"
+  - { schema: org.gnome.desktop.interface, key: gtk-theme, value: "'Yaru-blue-dark'" }
+  - { schema: org.gnome.desktop.interface, key: icon-theme, value: "'Yaru-blue-dark'" }
+  - { schema: org.gnome.desktop.interface, key: cursor-theme, value: "'Yaru'" }
+  - { schema: org.gnome.desktop.interface, key: color-scheme, value: "'prefer-dark'" }
+  - { schema: org.gnome.desktop.interface, key: accent-color, value: "'blue'" }
+  - { schema: org.gnome.desktop.interface, key: font-name, value: "'Ubuntu Sans 11'" }
+  - { schema: org.gnome.desktop.interface, key: document-font-name, value: "'Ubuntu Sans 11'" }
+  - { schema: org.gnome.desktop.interface, key: monospace-font-name, value: "'Ubuntu Mono 11'" }
+  - { schema: org.gnome.desktop.interface, key: enable-animations, value: 'true' }
+  - { schema: org.gnome.desktop.interface, key: enable-hot-corners, value: 'false' }
+  - { schema: org.gnome.desktop.interface, key: clock-format, value: "'24h'" }
+  - { schema: org.gnome.desktop.interface, key: clock-show-weekday, value: 'true' }
+  - { schema: org.gnome.desktop.interface, key: show-battery-percentage, value: 'true' }
+  - { schema: org.gnome.mutter, key: dynamic-workspaces, value: 'true' }
+  - { schema: org.gnome.mutter, key: center-new-windows, value: 'true' }
+  - { schema: org.gnome.desktop.wm.preferences, key: button-layout, value: "'appmenu:minimize,maximize,close'" }
+  - { schema: org.gtk.gtk4.Settings.FileChooser, key: show-hidden, value: 'true' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: dock-position, value: "'BOTTOM'" }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: dash-max-icon-size, value: '36' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: dock-fixed, value: 'false' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: autohide, value: 'true' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: intellihide, value: 'true' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: extend-height, value: 'false' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: show-trash, value: 'false' }
+  - { schema: org.gnome.shell.extensions.dash-to-dock, key: show-mounts, value: 'false' }
 
-  - schema: org.gnome.desktop.interface
-    key: gtk-theme
-    value: "'Adwaita'"
-
-  - schema: org.gnome.desktop.interface
-    key: icon-theme
-    value: "'Yaru'"
-
-  - schema: org.gnome.desktop.interface
-    key: cursor-theme
-    value: "'Yaru'"
-
-  - schema: org.gnome.desktop.interface
-    key: accent-color
-    value: "'blue'"
-
-  # Productivity
-  - schema: org.gnome.desktop.interface
-    key: enable-animations
-    value: "true"
-
-  - schema: org.gnome.desktop.interface
-    key: enable-hot-corners
-    value: "false"
-
-  - schema: org.gnome.desktop.interface
-    key: clock-format
-    value: "'24h'"
-
-  - schema: org.gnome.desktop.interface
-    key: clock-show-weekday
-    value: "true"
-
-  - schema: org.gnome.desktop.interface
-    key: show-battery-percentage
-    value: "true"
-
-  # Window management
-  - schema: org.gnome.mutter
-    key: center-new-windows
-    value: "true"
-
-  - schema: org.gnome.mutter
-    key: dynamic-workspaces
-    value: "true"
-
-  - schema: org.gnome.mutter
-    key: workspaces-only-on-primary
-    value: "false"
-
-  # Keep window controls on the right
-  - schema: org.gnome.desktop.wm.preferences
-    key: button-layout
-    value: "'appmenu:minimize,maximize,close'"
-
-  # File manager
-  - schema: org.gnome.nautilus.preferences
-    key: show-hidden-files
-    value: "true"
-
-  # Dock
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: dock-position
-    value: "'BOTTOM'"
-
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: dash-max-icon-size
-    value: "36"
-
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: dock-fixed
-    value: "false"
-
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: intellihide
-    value: "true"
-
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: show-trash
-    value: "false"
-
-  - schema: org.gnome.shell.extensions.dash-to-dock
-    key: show-mounts
-    value: "false"
+# A reproducible shortcut; overrides user's custom shortcuts list if enabled.
+workstation_gnome_manage_ghostty_shortcut: true
+workstation_gnome_ghostty_binding: '<Super>Return'

@@ -1,0 +1,40 @@
+---
+- name: Ensure wallpaper directory exists
+  ansible.builtin.file:
+    path: "{{ workstation_gnome_home }}/.local/share/backgrounds"
+    state: directory
+    mode: '0755'
+  when: workstation_gnome_wallpaper_enabled
+
+- name: Deploy wallpaper from workstation repository
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/wallpapers/{{ workstation_gnome_wallpaper_filename }}"
+    dest: "{{ workstation_gnome_home }}/.local/share/backgrounds/{{ workstation_gnome_wallpaper_filename }}"
+    mode: '0644'
+  when: workstation_gnome_wallpaper_enabled
+
+- name: Read current wallpaper URIs
+  ansible.builtin.command:
+    argv: [gsettings, get, org.gnome.desktop.background, "{{ item }}"]
+  environment: "{{ workstation_gnome_environment }}"
+  loop: [picture-uri, picture-uri-dark]
+  register: workstation_gnome_wallpapers
+  changed_when: false
+  check_mode: false
+  when: workstation_gnome_wallpaper_enabled
+
+- name: Apply wallpaper in light and dark modes
+  ansible.builtin.command:
+    argv:
+      - gsettings
+      - set
+      - org.gnome.desktop.background
+      - "{{ item.item }}"
+      - "{{ 'file://' ~ workstation_gnome_home ~ '/.local/share/backgrounds/' ~ workstation_gnome_wallpaper_filename }}"
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_wallpapers.results | default([]) }}"
+  loop_control: { label: "{{ item.item }}" }
+  when:
+    - workstation_gnome_wallpaper_enabled
+    - not ansible_check_mode
+    - item.stdout | trim != ("'file://" ~ workstation_gnome_home ~ '/.local/share/backgrounds/' ~ workstation_gnome_wallpaper_filename ~ "'")

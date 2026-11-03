@@ -1,0 +1,38 @@
+---
+- name: Require local workstation connection
+  ansible.builtin.assert:
+    that:
+      - ansible_connection | default('ssh') == 'local'
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_release'] == 'resolute'
+      - ansible_facts['user_uid'] | int != 0
+    fail_msg: 'GNOME role requires local execution as the logged-in non-root user on Ubuntu 26.04.'
+
+- name: Set GNOME session environment
+  ansible.builtin.set_fact:
+    workstation_gnome_environment:
+      XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+    workstation_gnome_home: "{{ ansible_facts['env']['HOME'] }}"
+
+- name: Check user session bus
+  ansible.builtin.stat:
+    path: "/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  register: workstation_gnome_bus
+
+- name: Require active desktop session
+  ansible.builtin.assert:
+    that: [workstation_gnome_bus.stat.exists]
+    fail_msg: 'Log in to GNOME and run Ansible from that desktop session.'
+
+- name: Read GNOME Shell version
+  ansible.builtin.command: { argv: [gnome-shell, --version] }
+  register: workstation_gnome_version_check
+  changed_when: false
+  check_mode: false
+
+- name: Require tested GNOME major version
+  ansible.builtin.assert:
+    that:
+      - "('GNOME Shell ' ~ workstation_gnome_expected_major ~ '.') in workstation_gnome_version_check.stdout"
+    fail_msg: "This role is tested for GNOME {{ workstation_gnome_expected_major }}; found {{ workstation_gnome_version_check.stdout }}."

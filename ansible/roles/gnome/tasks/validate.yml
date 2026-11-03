@@ -1,0 +1,21 @@
+---
+- name: Inspect installed GTK theme
+  ansible.builtin.stat:
+    path: "/usr/share/themes/{{ workstation_gnome_gtk_theme }}/gtk-3.0"
+  register: workstation_gnome_gtk_assets
+- name: Inspect installed icon theme
+  ansible.builtin.stat:
+    path: "/usr/share/icons/{{ workstation_gnome_icon_theme }}/index.theme"
+  register: workstation_gnome_icon_assets
+- name: Inspect installed cursor theme
+  ansible.builtin.stat:
+    path: "/usr/share/icons/{{ workstation_gnome_cursor_theme }}/cursors"
+  register: workstation_gnome_cursor_assets
+- name: Require installed theme assets before selecting them
+  ansible.builtin.assert:
+    that:
+      - workstation_gnome_gtk_assets.stat.isdir | default(false)
+      - workstation_gnome_icon_assets.stat.isreg | default(false)
+      - workstation_gnome_cursor_assets.stat.isdir | default(false)
+    fail_msg: 'A configured GTK/icon/cursor theme asset is missing. No appearance settings have been applied.'
+  when: not ansible_check_mode

@@ -1,0 +1,34 @@
+---
+- name: List available GNOME schemas
+  ansible.builtin.command: { argv: [gsettings, list-schemas] }
+  environment: "{{ workstation_gnome_environment }}"
+  register: workstation_gnome_schemas
+  changed_when: false
+  check_mode: false
+
+- name: Check all requested schemas are installed
+  ansible.builtin.assert:
+    that: [item.schema in workstation_gnome_schemas.stdout_lines]
+    fail_msg: "Missing GNOME schema: {{ item.schema }}"
+  loop: "{{ workstation_gnome_settings }}"
+  loop_control: { label: "{{ item.schema }}" }
+
+- name: Read GNOME settings
+  ansible.builtin.command:
+    argv: [gsettings, get, "{{ item.schema }}", "{{ item.key }}"]
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_settings }}"
+  loop_control: { label: "{{ item.schema }} {{ item.key }}" }
+  register: workstation_gnome_current
+  changed_when: false
+  check_mode: false
+
+- name: Apply only changed GNOME settings
+  ansible.builtin.command:
+    argv: [gsettings, set, "{{ item.item.schema }}", "{{ item.item.key }}", "{{ item.item.value }}"]
+  environment: "{{ workstation_gnome_environment }}"
+  loop: "{{ workstation_gnome_current.results }}"
+  loop_control: { label: "{{ item.item.schema }} {{ item.item.key }}" }
+  when:
+    - item.stdout | trim != item.item.value
+    - not ansible_check_mode

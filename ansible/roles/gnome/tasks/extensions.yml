@@ -1,0 +1,23 @@
+---
+# GNOME Shell reads this user setting at login. A new package may not show up
+# until the user logs out/in, but the desired UUID list is saved consistently.
+- name: Read enabled GNOME extensions
+  ansible.builtin.command:
+    argv: [gsettings, get, org.gnome.shell, enabled-extensions]
+  environment: "{{ workstation_gnome_environment }}"
+  register: workstation_gnome_extensions_current
+  changed_when: false
+  check_mode: false
+
+- name: Apply exact extension enablement list
+  ansible.builtin.command:
+    argv:
+      - gsettings
+      - set
+      - org.gnome.shell
+      - enabled-extensions
+      - "{{ workstation_gnome_enabled_extensions | to_json }}"
+  environment: "{{ workstation_gnome_environment }}"
+  when:
+    - not ansible_check_mode
+    - (workstation_gnome_extensions_current.stdout | trim | regex_replace('^@as ', '') | from_yaml) != workstation_gnome_enabled_extensions
