@@ -1,31 +1,25 @@
-# Phase 22 — Read-only Ubuntu workstation audit
+# Phase 23 filtered Proton backup patch
 
-Extract this package at the repository root. It **adds** `ansible/playbooks/validate-workstation.yml` and does not alter existing roles or the provisioning playbook.
+This archive replaces only `ansible/roles/backup/templates/workstation-proton-backup.sh.j2`, adds the ignore-list template and includes a small patch script. The patch script preserves all your **existing** Phase 23 variables (sources, timer, remote path) and backs up the two YAML files before modifying them.
 
-```fish
-cd ~/Projects/ubuntu-workstations/ansible
-ansible-playbook playbooks/validate-workstation.yml --syntax-check
-ansible-playbook playbooks/validate-workstation.yml
-```
-
-If your inventory is not automatically loaded from `ansible.cfg`, pass `-i inventory/hosts.yml`.
-
-The audit is **read-only**. It checks software visibility in a path that includes user-managed mise, uv and rustup binaries; service status; GNOME appearance and enabled extensions; Syncthing folder; KVM availability; and installed Proton DEB packages. It deliberately does not contact Proton APIs, access passwords, inspect Syncthing's credentials, or modify any files or services.
-
-Missing commands and unavailable services are shown as findings but do not fail the default audit. To make it a gating check:
+Install (Fish shell):
 
 ```fish
-ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true
+cd ~/Projects/ubuntu-workstations
+tar -tzf ~/Downloads/phase23-proton-filtered-safe.tar.gz
+tar -xzf ~/Downloads/phase23-proton-filtered-safe.tar.gz -C .
+python3 apply-phase23-filter.py
+cd ansible
+ansible-playbook playbooks/workstation.yml --syntax-check
+ansible-playbook playbooks/workstation.yml -K
+~/.local/bin/workstation-proton-backup --show-excludes
+~/.local/bin/workstation-proton-backup --dry-run
 ```
 
-Edit the variables at the top of the audit playbook if you customize your desktop theme or required tools. The audit checks only shortcut **paths**, not whether the shortcuts launch the expected command; we deliberately avoid invoking applications. It checks the installed Proton DEB package list, not whether you can sign in.
+To test actual upload, run `~/.local/bin/workstation-proton-backup` once, then confirm remote output and a test restore.
 
-Run it as the logged-in desktop user, while a GNOME session is active. Commands probing GUI/session services may report unavailable if run over headless SSH. The playbook uses read-only `command`/`shell` probes, with `changed_when: false` and `check_mode: false` to ensure they run even under `--check`; no state-changing Ansible modules are used. In an Ansible recap, fact-gathering may create local temporary files as Ansible normally does, but the managed workstation configuration is not changed.
+Update `workstation_backup_excludes` in `ansible/roles/backup/defaults/main.yml` to fit your projects. `.git/` is **not** excluded by default to protect local unpublished commits. If you include it, Git metadata will not be backed up. The exclude rules match at any directory level. `build/`, `dist/`, `target/`, and `*.log` might hold valuable output, so inspect the defaults and remove rules if necessary.
 
-To check it after customization:
+The Bash script stages the filtered directory using hardlinks in `~/.cache` to minimize extra disk usage. It requires sources and staging directory to reside on the same filesystem; otherwise it aborts instead of making a full second copy. It doesn't follow symlinks and is **not** a point-in-time filesystem snapshot. A file modified during upload may not be backed up consistently. The old remote files excluded going forward will **remain** in Proton Drive until manually removed; no cloud deletions occur.
 
-```fish
-ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true
-```
-
-Commit only after the output matches your intended workstation configuration.
+After validation, delete unneeded local helper files `apply-phase23-filter.py` and `workstation-backup-excludes-defaults.yml` from the repo root before committing.
