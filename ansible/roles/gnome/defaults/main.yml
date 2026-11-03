@@ -1,38 +1,100 @@
 ---
+# Wallpaper filename inside assets/wallpapers/
+# Change this if your existing image uses a different filename.
 workstation_wallpaper_filename: desktop.png
 
+workstation_gnome_packages:
+  - gnome-shell-extension-system-monitor
+
+# Shared desktop settings.
+# Values use GVariant syntax, as expected by gsettings.
 workstation_gnome_settings:
+  # Appearance
+  - schema: org.gnome.desktop.interface
+    key: color-scheme
+    value: "'prefer-dark'"
+
+  - schema: org.gnome.desktop.interface
+    key: gtk-theme
+    value: "'Adwaita'"
+
+  - schema: org.gnome.desktop.interface
+    key: icon-theme
+    value: "'Yaru'"
+
+  - schema: org.gnome.desktop.interface
+    key: cursor-theme
+    value: "'Yaru'"
+
   - schema: org.gnome.desktop.interface
     key: accent-color
-    value: orange
-    expected: "'orange'"
+    value: "'blue'"
+
+  # Productivity
+  - schema: org.gnome.desktop.interface
+    key: enable-animations
+    value: "true"
 
   - schema: org.gnome.desktop.interface
     key: enable-hot-corners
     value: "false"
-    expected: "false"
 
   - schema: org.gnome.desktop.interface
     key: clock-format
-    value: "24h"
-    expected: "'24h'"
+    value: "'24h'"
+
+  - schema: org.gnome.desktop.interface
+    key: clock-show-weekday
+    value: "true"
 
   - schema: org.gnome.desktop.interface
     key: show-battery-percentage
     value: "true"
-    expected: "true"
 
+  # Window management
   - schema: org.gnome.mutter
     key: center-new-windows
     value: "true"
-    expected: "true"
 
   - schema: org.gnome.mutter
     key: dynamic-workspaces
     value: "true"
-    expected: "true"
 
+  - schema: org.gnome.mutter
+    key: workspaces-only-on-primary
+    value: "false"
+
+  # Keep window controls on the right
   - schema: org.gnome.desktop.wm.preferences
     key: button-layout
-    value: "icon:minimize,maximize,close"
-    expected: "'icon:minimize,maximize,close'"
+    value: "'appmenu:minimize,maximize,close'"
+
+  # File manager
+  - schema: org.gnome.nautilus.preferences
+    key: show-hidden-files
+    value: "true"
+
+  # Dock
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: dock-position
+    value: "'BOTTOM'"
+
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: dash-max-icon-size
+    value: "36"
+
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: dock-fixed
+    value: "false"
+
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: intellihide
+    value: "true"
+
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: show-trash
+    value: "false"
+
+  - schema: org.gnome.shell.extensions.dash-to-dock
+    key: show-mounts
+    value: "false"

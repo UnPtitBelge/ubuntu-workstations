@@ -1,38 +1,55 @@
 ---
-- name: Define GNOME user paths
-  ansible.builtin.set_fact:
-    workstation_gnome_home: "{{ ansible_facts['env']['HOME'] }}"
-    workstation_gnome_runtime: "/run/user/{{ ansible_facts['user_uid'] }}"
+- name: Install GNOME extensions
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_gnome_packages }}"
+    state: present
 
-- name: Define wallpaper destination
+- name: Define GNOME environment
   ansible.builtin.set_fact:
-    workstation_wallpaper_path: >-
-      {{ workstation_gnome_home }}/.local/share/backgrounds/{{ workstation_wallpaper_filename }}
+    gnome_home: "{{ ansible_facts['env']['HOME'] }}"
+    gnome_runtime: "/run/user/{{ ansible_facts['user_uid'] }}"
 
 - name: Check GNOME session bus
   ansible.builtin.stat:
-    path: "{{ workstation_gnome_runtime }}/bus"
-  register: workstation_gnome_bus
+    path: "{{ gnome_runtime }}/bus"
+  register: gnome_bus
 
-- name: Require an active GNOME user session
+- name: Require an active desktop session
   ansible.builtin.assert:
     that:
-      - workstation_gnome_bus.stat.exists
-    fail_msg: >-
-      GNOME configuration requires an active user session.
-      Run this role locally while logged into GNOME.
+      - gnome_bus.stat.exists
+    fail_msg: "Log into GNOME before running this role."
 
 - name: Create wallpaper directory
   ansible.builtin.file:
-    path: "{{ workstation_gnome_home }}/.local/share/backgrounds"
+    path: "{{ gnome_home }}/.local/share/backgrounds"
     state: directory
     mode: "0755"
 
-- name: Install workstation wallpaper
+- name: Deploy wallpaper
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/wallpapers/{{ workstation_wallpaper_filename }}"
-    dest: "{{ workstation_wallpaper_path }}"
+    dest: "{{ gnome_home }}/.local/share/backgrounds/{{ workstation_wallpaper_filename }}"
     mode: "0644"
+
+- name: Check available GNOME schemas
+  ansible.builtin.command:
+    argv:
+      - gsettings
+      - list-schemas
+  register: gnome_schemas
+  changed_when: false
+  check_mode: false
+
+- name: Verify required schemas exist
+  ansible.builtin.assert:
+    that:
+      - item.schema in gnome_schemas.stdout_lines
+    fail_msg: "GNOME schema not installed: {{ item.schema }}"
+  loop: "{{ workstation_gnome_settings }}"
+  loop_control:
+    label: "{{ item.schema }}"
 
 - name: Read current GNOME settings
   ansible.builtin.command:
@@ -42,12 +59,9 @@
       - "{{ item.schema }}"
       - "{{ item.key }}"
   loop: "{{ workstation_gnome_settings }}"
-  register: workstation_gnome_current
+  register: gnome_current_settings
   changed_when: false
   check_mode: false
-  environment:
-    XDG_RUNTIME_DIR: "{{ workstation_gnome_runtime }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ workstation_gnome_runtime }}/bus"
 
 - name: Apply GNOME settings
   ansible.builtin.command:
@@ -57,15 +71,14 @@
       - "{{ item.item.schema }}"
       - "{{ item.item.key }}"
       - "{{ item.item.value }}"
-  loop: "{{ workstation_gnome_current.results }}"
+  loop: "{{ gnome_current_settings.results }}"
   loop_control:
     label: "{{ item.item.schema }} {{ item.item.key }}"
-  when: item.stdout | trim != item.item.expected
-  environment:
-    XDG_RUNTIME_DIR: "{{ workstation_gnome_runtime }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ workstation_gnome_runtime }}/bus"
+  when:
+    - item.stdout | trim != item.item.value
+    - not ansible_check_mode
 
-- name: Read current wallpaper settings
+- name: Read wallpaper settings
   ansible.builtin.command:
     argv:
       - gsettings
@@ -75,27 +88,23 @@
   loop:
     - picture-uri
     - picture-uri-dark
-  register: workstation_wallpaper_current
+  register: gnome_current_wallpapers
   changed_when: false
   check_mode: false
-  environment:
-    XDG_RUNTIME_DIR: "{{ workstation_gnome_runtime }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ workstation_gnome_runtime }}/bus"
 
-- name: Set GNOME wallpaper
+- name: Configure wallpaper
   ansible.builtin.command:
     argv:
       - gsettings
       - set
       - org.gnome.desktop.background
       - "{{ item.item }}"
-      - "file://{{ workstation_wallpaper_path }}"
-  loop: "{{ workstation_wallpaper_current.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: >-
-    item.stdout | trim !=
-    ("'file://" ~ workstation_wallpaper_path ~ "'")
-  environment:
-    XDG_RUNTIME_DIR: "{{ workstation_gnome_runtime }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path={{ workstation_gnome_runtime }}/bus"
+      - "file://{{ gnome_home }}/.local/share/backgrounds/{{ workstation_wallpaper_filename }}"
+  loop: "{{ gnome_current_wallpapers.results }}"
+  when:
+    - >-
+      item.stdout | trim !=
+      ("'file://" ~ gnome_home ~
+       "/.local/share/backgrounds/" ~
+       workstation_wallpaper_filename ~ "'")
+    - not ansible_check_mode
