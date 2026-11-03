@@ -58,3 +58,43 @@
       kvm_device_present: "{{ workstation_hardware_has_kvm }}"
       session_bus_present: "{{ workstation_hardware_has_session_bus }}"
       gnome_session_present: "{{ workstation_hardware_has_gnome_session }}"
+
+- name: Check KVM read permission
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/test
+      - -r
+      - /dev/kvm
+  register: workstation_kvm_read
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: workstation_hardware_has_kvm | bool
+
+- name: Check KVM write permission
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/test
+      - -w
+      - /dev/kvm
+  register: workstation_kvm_write
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: workstation_hardware_has_kvm | bool
+
+- name: Record KVM accessibility
+  ansible.builtin.set_fact:
+    workstation_hardware_kvm_accessible: >-
+      {{
+        (workstation_hardware_has_kvm | bool)
+        and (workstation_kvm_read.rc | default(1) == 0)
+        and (workstation_kvm_write.rc | default(1) == 0)
+      }}
+
+- name: Report KVM status
+  ansible.builtin.debug:
+    msg:
+      device_present: "{{ workstation_hardware_has_kvm }}"
+      accessible_by_user: "{{ workstation_hardware_kvm_accessible }}"
+      virtualization_role: "{{ workstation_hardware_virtualization_role }}"

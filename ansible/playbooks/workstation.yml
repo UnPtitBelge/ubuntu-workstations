@@ -11,7 +11,10 @@
     - languages
     - containers
     - virtualization
-    - gnome
+
+    - role: gnome
+      when: workstation_hardware_has_gnome_session | default(false) | bool
+
     - syncthing
     - proton
     - backup
