@@ -1,9 +1,7 @@
 ---
 # Proton workstation integration
 
-# Proton VPN is already installed and configured.
-# Do not modify its existing installation or connection settings.
-workstation_proton_manage_vpn: false
+workstation_proton_manage_vpn: true
 
 # Proton Drive CLI
 workstation_proton_drive_enabled: true

@@ -1,4 +1,8 @@
 ---
+- name: Install official Proton VPN
+  ansible.builtin.import_tasks: vpn.yml
+  when: workstation_proton_manage_vpn | bool
+
 - name: Configure Proton Drive CLI
   ansible.builtin.import_tasks: drive.yml
   when: workstation_proton_drive_enabled

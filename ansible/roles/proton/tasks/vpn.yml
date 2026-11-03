@@ -1,0 +1,57 @@
+---
+- name: Check Proton VPN repository installation
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - "-f=${Status}"
+      - protonvpn-stable-release
+  register: proton_vpn_repo_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Configure Proton VPN repository
+  when: "'install ok installed' not in proton_vpn_repo_status.stdout"
+  block:
+    - name: Ensure Proton package cache exists
+      become: true
+      ansible.builtin.file:
+        path: /var/cache/ansible/proton
+        state: directory
+        mode: "0755"
+
+    - name: Download verified Proton VPN repository package
+      become: true
+      ansible.builtin.get_url:
+        url: >-
+          https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.10_all.deb
+        dest: /var/cache/ansible/proton/protonvpn-stable-release_1.0.10_all.deb
+        checksum: >-
+          sha256:c8a9fffb4ebdd63db08ce7f11c9b0ac394064ae6a210feb9ab63a0f7d8d060a7
+        mode: "0644"
+
+    - name: Install Proton VPN repository package
+      become: true
+      ansible.builtin.apt:
+        deb: /var/cache/ansible/proton/protonvpn-stable-release_1.0.10_all.deb
+        state: present
+      register: proton_vpn_repo_install
+      when: not ansible_check_mode
+
+- name: Refresh APT after adding Proton repository
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+  when:
+    - not ansible_check_mode
+    - proton_vpn_repo_install is defined
+    - proton_vpn_repo_install is changed
+
+- name: Install Proton VPN GNOME application
+  become: true
+  ansible.builtin.apt:
+    name: proton-vpn-gnome-desktop
+    state: present
+  when: not ansible_check_mode
+

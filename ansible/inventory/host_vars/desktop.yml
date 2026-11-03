@@ -1,0 +1,13 @@
+---
+# Desktop workstation
+
+workstation_device_class: desktop
+workstation_device_name: Omnissiah-desktop
+
+# Preserve independent Syncthing configuration.
+workstation_syncthing_enabled: true
+
+# Prepare Proton backups, but do not schedule
+# them until authentication and restore testing succeed.
+workstation_backup_enabled: true
+workstation_backup_timer_enabled: false

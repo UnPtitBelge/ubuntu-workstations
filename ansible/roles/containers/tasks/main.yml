@@ -32,6 +32,13 @@
     enabled: true
   register: workstation_docker_repository
 
+- name: Refresh APT cache after configuring Docker repository
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: workstation_docker_repository.changed
+
 - name: Install Docker Engine and plugins
   become: true
   ansible.builtin.apt:
@@ -83,6 +90,14 @@
       - "{{ workstation_docker_version.stdout }}"
       - "{{ workstation_compose_version.stdout }}"
       - "{{ workstation_buildx_version.stdout }}"
+
+- name: Allow workstation user to access Docker
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_facts['user_id'] }}"
+    groups:
+      - docker
+    append: true
 
 # ─────────────────────────────────────────────
 # Containerlab

@@ -5,6 +5,12 @@
     name: "{{ workstation_shell_packages }}"
     state: present
 
+- name: Install Ghostty terminal
+  become: true
+  ansible.builtin.apt:
+    name: ghostty
+    state: present
+
 - name: Create user configuration directories
   ansible.builtin.file:
     path: "{{ ansible_facts['env']['HOME'] }}/.config/{{ item }}"

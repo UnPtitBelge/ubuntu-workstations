@@ -1,16 +1,18 @@
 ---
 - name: Check Ghostty executable for GNOME shortcut
-  ansible.builtin.command: { argv: [which, ghostty] }
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/which
+      - ghostty
+  register: workstation_ghostty_executable
   changed_when: false
   check_mode: false
-  register: workstation_gnome_ghostty
-  when: workstation_gnome_manage_ghostty_shortcut
 
 - name: Ensure Ghostty exists before binding shortcut
   ansible.builtin.assert:
-    that: [workstation_gnome_ghostty.rc == 0]
-    fail_msg: 'Ghostty not found in PATH; install it before enabling the launcher shortcut.'
-  when: workstation_gnome_manage_ghostty_shortcut
+    that:
+      - workstation_ghostty_executable.rc == 0
+    fail_msg: "Ghostty is not installed or cannot be found in PATH."
 
 - name: Define Ghostty custom shortcut keys
   ansible.builtin.set_fact:
