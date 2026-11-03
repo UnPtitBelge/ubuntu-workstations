@@ -1,0 +1,8 @@
+---
+- name: Configure Ubuntu workstations
+  hosts: workstations
+  gather_facts: true
+
+  roles:
+    - base
+    - shell
