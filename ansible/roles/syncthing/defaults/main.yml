@@ -1,0 +1,10 @@
+---
+# Syncthing workstation configuration
+
+workstation_syncthing_enabled: true
+
+# Start automatically when the user logs in.
+workstation_syncthing_service_enabled: true
+
+# Do not configure synchronization folders yet.
+# Each workstation retains its own device identity.

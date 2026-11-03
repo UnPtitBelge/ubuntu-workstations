@@ -1,0 +1,55 @@
+---
+- name: Install Syncthing
+  become: true
+  ansible.builtin.apt:
+    name: syncthing
+    state: present
+  when: workstation_syncthing_enabled
+
+- name: Configure Syncthing user service
+  when: workstation_syncthing_enabled
+  block:
+    - name: Check packaged Syncthing user service
+      ansible.builtin.stat:
+        path: /usr/lib/systemd/user/syncthing.service
+      register: syncthing_packaged_unit
+
+    - name: Ensure user systemd directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user"
+        state: directory
+        mode: "0755"
+      when: not syncthing_packaged_unit.stat.exists
+
+    - name: Install Syncthing user service when absent from package
+      ansible.builtin.copy:
+        src: syncthing.service
+        dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/syncthing.service"
+        mode: "0644"
+      when: not syncthing_packaged_unit.stat.exists
+
+    - name: Enable and start Syncthing user service
+      ansible.builtin.systemd_service:
+        name: syncthing.service
+        scope: user
+        daemon_reload: true
+        enabled: true
+        state: started
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: >-
+          unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus
+      when: workstation_syncthing_service_enabled
+
+    - name: Check Syncthing version
+      ansible.builtin.command:
+        argv:
+          - syncthing
+          - --version
+      register: syncthing_version
+      changed_when: false
+      check_mode: false
+
+    - name: Report Syncthing version
+      ansible.builtin.debug:
+        var: syncthing_version.stdout

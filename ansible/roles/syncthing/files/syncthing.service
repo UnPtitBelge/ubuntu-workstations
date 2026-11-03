@@ -1,0 +1,17 @@
+[Unit]
+Description=Syncthing - File Synchronization
+Documentation=man:syncthing(1)
+StartLimitIntervalSec=60
+StartLimitBurst=4
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/syncthing serve --no-browser --no-restart
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=3 4
+RestartForceExitStatus=3 4
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
