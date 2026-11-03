@@ -36,3 +36,21 @@ workstation_shell_packages:
   - zoxide
   - starship
   - glow
+
+# Development toolchains
+
+workstation_python_versions:
+  - "3.12.13"
+  - "3.13.14"
+
+workstation_python_tools:
+  - name: crewai
+    version: "1.15.20"
+
+  - name: jupyterlab
+    version: "4.6.3"
+
+  - name: mistral-vibe
+    version: "2.24.1"
+
+workstation_rust_toolchain: stable

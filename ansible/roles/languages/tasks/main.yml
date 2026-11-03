@@ -1,0 +1,125 @@
+---
+- name: Set development tool paths
+  ansible.builtin.set_fact:
+    workstation_home: "{{ ansible_facts['env']['HOME'] }}"
+    workstation_uv: "{{ ansible_facts['env']['HOME'] }}/.local/bin/uv"
+    workstation_mise: "{{ ansible_facts['env']['HOME'] }}/.local/bin/mise"
+    workstation_rustup: "{{ ansible_facts['env']['HOME'] }}/.cargo/bin/rustup"
+
+- name: Verify toolchain managers are installed
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ workstation_uv }}"
+    - "{{ workstation_mise }}"
+    - "{{ workstation_rustup }}"
+  register: workstation_manager_checks
+
+- name: Require toolchain managers
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Missing toolchain manager: {{ item.item }}"
+  loop: "{{ workstation_manager_checks.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Ensure mise configuration directory exists
+  ansible.builtin.file:
+    path: "{{ workstation_home }}/.config/mise"
+    state: directory
+    mode: "0755"
+
+- name: Deploy mise configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../dotfiles/mise/config.toml"
+    dest: "{{ workstation_home }}/.config/mise/config.toml"
+    mode: "0644"
+    backup: true
+  register: workstation_mise_configuration
+
+- name: Check for missing mise tools
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_mise }}"
+      - ls
+      - --missing
+      - --no-header
+  register: workstation_missing_mise_tools
+  changed_when: false
+  check_mode: false
+
+- name: Install missing mise tools
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_mise }}"
+      - install
+  when: workstation_missing_mise_tools.stdout | trim | length > 0
+  environment:
+    PATH: "{{ workstation_home }}/.local/share/mise/installs/node/22/bin:{{ ansible_facts['env']['PATH'] }}"
+
+- name: Inspect installed Python versions
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_uv }}"
+      - python
+      - list
+      - --only-installed
+  register: workstation_installed_python
+  changed_when: false
+  check_mode: false
+
+- name: Install missing Python versions
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_uv }}"
+      - python
+      - install
+      - "{{ item }}"
+  loop: "{{ workstation_python_versions }}"
+  when: item not in workstation_installed_python.stdout
+
+- name: Inspect installed uv tools
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_uv }}"
+      - tool
+      - list
+  register: workstation_installed_uv_tools
+  changed_when: false
+  check_mode: false
+
+- name: Install missing or mismatched uv tools
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_uv }}"
+      - tool
+      - install
+      - "{{ item.name }}=={{ item.version }}"
+  loop: "{{ workstation_python_tools }}"
+  loop_control:
+    label: "{{ item.name }}=={{ item.version }}"
+  when: >
+    (item.name ~ ' v' ~ item.version) not in
+    workstation_installed_uv_tools.stdout
+
+- name: Inspect installed Rust toolchains
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_rustup }}"
+      - toolchain
+      - list
+  register: workstation_installed_rust
+  changed_when: false
+  check_mode: false
+
+- name: Install stable Rust toolchain if missing
+  ansible.builtin.command:
+    argv:
+      - "{{ workstation_rustup }}"
+      - toolchain
+      - install
+      - "{{ workstation_rust_toolchain }}"
+  when: >
+    workstation_rust_toolchain not in
+    workstation_installed_rust.stdout
