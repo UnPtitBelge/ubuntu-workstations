@@ -1,0 +1,31 @@
+---
+# Disposable Ubuntu Server VM only. Do not add GNOME, Syncthing, Proton,
+# backup, or virtualization roles: they require desktop sessions, credentials,
+# storage, or hardware that the headless cloud image does not provide.
+- name: Rehearse workstation foundation on a clean Ubuntu VM
+  hosts: all
+  connection: local
+  gather_facts: true
+  vars_files:
+    - ../inventory/group_vars/all.yml
+  pre_tasks:
+    - name: Require Ubuntu 26.04
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_version'] == '26.04'
+        fail_msg: This rehearsal is designed for Ubuntu 26.04 only.
+
+    - name: Require a disposable rehearsal VM
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'WORKSTATION_REHEARSAL_VM') == 'yes'
+        fail_msg: >-
+          Refusing to modify this system. Set WORKSTATION_REHEARSAL_VM=yes
+          inside the disposable VM to run the rehearsal.
+
+  roles:
+    - role: base
+    - role: shell
+    - role: bootstrap
+    - role: languages
