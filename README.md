@@ -1,91 +1,214 @@
-# Phase 24 — Ubuntu 26.04 clean-install rehearsal
+# Ubuntu Workstations
 
-This is a **VM-only rehearsal**; do not run the rehearsal playbook on your laptop.
-It never runs GNOME, Docker/Containerlab, virtualization, Syncthing, Proton, or backup roles. A cloud VM does not provide your user session, GPU, KVM passthrough, or secrets. These components require separate desktop testing.
+**One Git repository. One Ansible configuration. Reproducible Ubuntu workstations.**
 
-## On your laptop (Fish)
+An opinionated, personal workstation setup for **Ubuntu Desktop 26.04 LTS**, built with **Ansible + Git**. The goal is to give a laptop and a future desktop the same development environment and GNOME experience while keeping machine-specific hardware, device identities, and credentials separate.
 
-First extract the package into your existing repo and commit **only the new rehearsal playbook**. Then build the VM from committed files:
+> **Status:** Stable baseline candidate (`v1.0.0`). Tag the repository only after confirming the final checks on your machine. The existing laptop inventory host is `laptop` (`Omnissiah-pocket`); a future `desktop` host can be added when that machine exists.
 
-```fish
-cd ~/Projects/ubuntu-workstations
-tar -xzf ~/Downloads/phase24-clean-install-rehearsal.tar.gz -C .
-git diff --check
-git add ansible/playbooks/rehearsal-headless.yml
-git commit -m "test(workstation): add disposable VM foundation rehearsal"
+## What it manages
+
+| Area | Components |
+| --- | --- |
+| Desktop | GNOME 50, Yaru Blue Dark, wallpaper, Ubuntu Dock, shortcuts, Resource Monitor |
+| Shell | Fish, Ghostty, Starship, zoxide, shell configuration |
+| Development | Git and base tooling, mise, Node.js, Java, uv/Python, rustup/Rust |
+| Containers | Docker Engine, Compose, Buildx, Containerlab |
+| Virtualization | QEMU and Multipass; hardware/KVM detection |
+| Synchronization | Syncthing user service and a selected shared directory |
+| Proton | Drive CLI, Pass, Mail; existing VPN configuration is preserved |
+| Backups | Filtered Proton Drive file uploads, file revisions, optional user timer |
+| Quality | Read-only health checks, clean-install rehearsal, repository audit |
+
+The configuration is intentionally **not** a complete disk image. It installs software and applies selected settings; user logins, encryption keys, Proton sessions, Syncthing device pairing, monitor arrangements, and files outside the configured backups need separate handling.
+
+## Repository layout
+
+```text
+.
+├── ansible/
+│   ├── ansible.cfg
+│   ├── inventory/
+│   │   ├── hosts.yml
+│   │   ├── group_vars/all.yml
+│   │   └── host_vars/
+│   │       ├── laptop.yml
+│   │       └── desktop.yml.example
+│   ├── playbooks/
+│   │   ├── workstation.yml             # Main provisioning
+│   │   ├── validate-workstation.yml    # Read-only health audit
+│   │   └── rehearsal-headless.yml      # Disposable VM foundation test
+│   └── roles/
+│       ├── backup/
+│       ├── base/
+│       ├── bootstrap/
+│       ├── containers/
+│       ├── gnome/
+│       ├── hardware/
+│       ├── languages/
+│       ├── proton/
+│       ├── shell/
+│       ├── syncthing/
+│       └── virtualization/
+├── assets/                              # Versioned appearance assets, if configured
+├── docs/
+│   ├── WORKSTATION-INSTALL.md
+│   ├── WORKSTATION-RECOVERY.md
+│   └── REPOSITORY-AUDIT.md
+└── scripts/audit-workstation.py
 ```
 
-From `~/Projects/ubuntu-workstations`:
+**Shared settings** live in role defaults and `ansible/inventory/group_vars/all.yml`. **Machine-specific overrides** belong in `ansible/inventory/host_vars/`. The laptop is the reference configuration; avoid duplicating shared values in individual host files.
 
-```fish
-# Inspect available VMs and image before creating anything
-multipass list
-multipass images
+## Quick start: provision a workstation
 
-# Pick a unique name; this example assumes it does not exist.
-multipass launch 26.04 --name workstation-rehearsal-24 --cpus 4 --memory 8G --disk 40G
+> Run on the **target machine**, while logged into its normal **GNOME desktop session**. The commands below are compatible with Fish. Ubuntu's default shell also accepts these particular commands.
 
-# Copy only tracked, committed source files (no .git, credentials, VM images).
-git archive --format=tar HEAD | gzip > /tmp/workstation-rehearsal-source.tar.gz
-multipass transfer /tmp/workstation-rehearsal-source.tar.gz workstation-rehearsal-24:/tmp/workstation-source.tar.gz
+### 1. Bootstrap
 
-# Install Ansible and prepare the test account within the disposable VM.
-multipass exec workstation-rehearsal-24 -- sudo apt-get update
-multipass exec workstation-rehearsal-24 -- sudo apt-get install -y ansible-core git ca-certificates
-multipass exec workstation-rehearsal-24 -- sudo useradd -m -s /bin/bash -G sudo matteo
-multipass exec workstation-rehearsal-24 -- sudo mkdir -p /home/matteo/Projects/ubuntu-workstations
-multipass exec workstation-rehearsal-24 -- sudo tar -xzf /tmp/workstation-source.tar.gz -C /home/matteo/Projects/ubuntu-workstations
-multipass exec workstation-rehearsal-24 -- sudo chown -R matteo:matteo /home/matteo/Projects
+```sh
+sudo apt-get update
+sudo apt-get install -y git ansible-core ca-certificates
 ```
 
-**Permission escalation:** the test account `matteo` requires sudo for APT tasks. In an expendable VM only, use a temporary sudoers drop-in:
+Clone your own repository (replace the placeholder with its real URL):
 
-```fish
-multipass exec workstation-rehearsal-24 -- sudo sh -c 'echo "matteo ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-workstation-rehearsal'
-multipass exec workstation-rehearsal-24 -- sudo chmod 0440 /etc/sudoers.d/90-workstation-rehearsal
+```sh
+mkdir -p ~/Projects
+cd ~/Projects
+git clone <YOUR_GIT_REMOTE_URL> ubuntu-workstations
+cd ubuntu-workstations/ansible
 ```
 
-### Syntax test (non-destructive)
+If you already have the repository, **do not clone over it**. Review its status and update it through your normal Git workflow.
 
-```fish
-multipass exec workstation-rehearsal-24 -- sudo -u matteo env HOME=/home/matteo ANSIBLE_ROLES_PATH=/home/matteo/Projects/ubuntu-workstations/ansible/roles ansible-playbook -i 'localhost,' -c local /home/matteo/Projects/ubuntu-workstations/ansible/playbooks/rehearsal-headless.yml --syntax-check
+### 2. Select the inventory host
+
+```sh
+ansible-inventory --graph
+ansible-inventory --host laptop
 ```
 
-### Optional real provisioning test (modifies the **VM**)
+Use `laptop` only on the laptop. For a new desktop, add its **real** inventory entry and copy the host-variable example to `host_vars/desktop.yml`, adjusting only settings that genuinely differ. Confirm that local provisioning points to the **current machine** (`ansible_connection: local`, or the equivalent in the existing inventory) before proceeding.
 
-Review the exact roles in `rehearsal-headless.yml` first. It intentionally executes the foundation roles (`base`, `shell`, `bootstrap`, `languages`) on the new VM and **does not** touch your laptop. It might download substantial toolchains and take time.
+### 3. Validate, preview, apply
 
-```fish
-multipass exec workstation-rehearsal-24 -- sudo -u matteo env HOME=/home/matteo WORKSTATION_REHEARSAL_VM=yes ANSIBLE_ROLES_PATH=/home/matteo/Projects/ubuntu-workstations/ansible/roles ansible-playbook -i 'localhost,' -c local /home/matteo/Projects/ubuntu-workstations/ansible/playbooks/rehearsal-headless.yml
+```sh
+ansible-playbook playbooks/workstation.yml --syntax-check
+ansible-playbook playbooks/workstation.yml --check --diff -K --limit laptop
+ansible-playbook playbooks/workstation.yml -K --limit laptop
 ```
 
-Repeat the same command and aim for `changed=0` on the second run. Capture errors and fix the role instead of applying untested changes to the laptop.
+Replace `laptop` with `desktop` **only after** adding the desktop inventory entry. Review the proposed changes before applying to an existing installation. The GNOME role requires an active GNOME session; a skipped GNOME role is **not** proof the desktop is configured.
 
-Note: some existing roles may assume a graphical session, user services, or preinstalled dependencies even within the foundation. That is exactly the type of gap this rehearsal aims to reveal. The guard variable protects against accidental execution on the laptop, but is not a security boundary.
+**Ubuntu 26.04 sudo note:** On the reference laptop, Ansible privilege escalation required selecting traditional `sudo` instead of the default `sudo-rs` alternative. If `-K` fails unexpectedly, inspect the system's configured sudo alternative rather than weakening permissions.
 
-### Inspect and clean up
+### 4. Verify and check idempotency
 
-```fish
-multipass info workstation-rehearsal-24
-multipass stop workstation-rehearsal-24
+```sh
+ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true --limit laptop
+ansible-playbook playbooks/workstation.yml -K --limit laptop
 ```
 
-Delete **only after** you've verified the exact VM name and you no longer need its results:
+On a stable machine, aim for `failed=0` and **`changed=0` on the second provisioning run**. Some operations require logging out and back into GNOME before visual changes are visible.
 
-```fish
-multipass delete workstation-rehearsal-24
-multipass purge
+## User services and first-time setup
+
+Ansible manages packages and service definitions, but it deliberately **does not copy machine identities or log in to personal accounts**.
+
+### Syncthing
+
+Syncthing runs as a **systemd user service**. Inspect it with:
+
+```sh
+systemctl --user status syncthing.service
 ```
 
-**Warning:** `multipass purge` permanently removes *all* previously deleted Multipass instances, not just this rehearsal VM. Skip it if you have other deleted VMs you might want to recover.
+Open the local interface at <http://127.0.0.1:8384> to pair devices and approve shared folders. Each workstation must retain its **own Syncthing identity**. The configured `~/Sync` workspace and staggered file versioning complement backups; synchronization alone is **not** a backup.
 
-## Scope of this phase
+### Proton
 
-- Uses explicit Ubuntu `26.04`, not floating `lts`.
-- Uses `git archive HEAD`, so uncommitted work is intentionally omitted.
-- Installs to a disposable VM only, with no connected secrets or Proton session.
-- Explicitly excludes GNOME and user systemd services from headless testing.
-- Rehearsal tests foundation roles and second-run idempotency, **not** full desktop equivalence.
-- Do not run the rehearsal playbook on your real workstation.
+The Proton role manages the **Drive CLI, Pass, and Mail**. The already-working **VPN installation is intentionally left untouched**. Authenticate applications interactively on each machine; do not put account tokens, passwords, or keyring contents in Git.
 
-If any role hardcodes physical hostnames, `ansible_user` or `~` assumptions, this test may fail. Fix those separately after inspecting the failing task.
+```sh
+proton-drive version
+proton-drive auth login
+proton-drive filesystem list /my-files
+```
+
+### Proton Drive backups
+
+The backup role sends selected data (initially `~/Documents` and `~/Sync`) to the machine-specific path:
+
+```text
+/my-files/Workstation-Backups/<actual-hostname>/
+```
+
+The **remote parent folder must already exist**. Backups exclude common development caches and generated content, including Python virtual environments, Node dependencies and build products. Review the exact ignore patterns in `ansible/roles/backup/defaults/main.yml`; important generated outputs may require an exception.
+
+```sh
+~/.local/bin/workstation-proton-backup --show-excludes
+~/.local/bin/workstation-proton-backup --dry-run
+~/.local/bin/workstation-proton-backup
+```
+
+**Before enabling the daily timer**, complete a successful manual backup **and restore a sample file into a separate location**. The script uses Proton Drive's file-revision strategy, **not immutable or point-in-time snapshots**; old remote files are not automatically deleted when new exclusions are added.
+
+To inspect scheduling and its logs:
+
+```sh
+systemctl --user status workstation-proton-backup.timer
+journalctl --user -u workstation-proton-backup.service -n 50 --no-pager
+```
+
+The timer is disabled by default in role defaults; enable it through your inventory after a successful restore test. Test a systemd-service-triggered backup too: keyring access can differ from an interactive terminal session. A timer being active does **not** prove backups are succeeding.
+
+## Development and design principles
+
+- **Preserve working state.** Audit first; apply focused changes; validate; commit.
+- **Idempotency matters.** A second Ansible run should make no unnecessary changes.
+- **Single source of truth.** Git and Ansible for configuration; Syncthing for approved shared files; Proton Drive for off-site file copies.
+- **User context matters.** GNOME settings and systemd user services generally require a live user session and its D-Bus environment.
+- **No secrets in Git.** Keep SSH keys, Syncthing certificates, Proton sessions and backup credentials machine-local or in appropriate secure storage.
+- **Hardware differs.** Graphics/display layout, CPU architecture and KVM access are detected or handled per machine.
+- **Prefer tested packages and pinned releases.** Don't automatically reinstall or replace working GNOME components to enforce cosmetic settings.
+
+## Tests and diagnostics
+
+Run the repository audit from the root:
+
+```sh
+python3 scripts/audit-workstation.py .
+```
+
+This is **read-only**. References to legacy Restic in the backup role are intentional migration cleanup; the active backup backend is Proton Drive. Multiple variable definitions across role defaults and host variables can also be intentional overrides.
+
+The headless rehearsal playbook (`ansible/playbooks/rehearsal-headless.yml`) tests foundation provisioning in a disposable Multipass VM. **It does not validate GNOME visuals, Proton authentication, or user-session services.** See the installation guide for VM preparation and account-creation precautions.
+
+## Recovery and documentation
+
+- **[Fresh installation](docs/WORKSTATION-INSTALL.md)** — bootstrap Ubuntu, choose inventory, provision, validate.
+- **[Recovery](docs/WORKSTATION-RECOVERY.md)** — restore selected files, rebuild a workstation, and test backup recoverability.
+- **[Repository audit](docs/REPOSITORY-AUDIT.md)** — audit findings and safe cleanup procedures.
+
+Syncthing and Proton Drive backups do **not** cover every file or disaster scenario. They do not reconstruct VM disks, live Docker volumes, excluded caches, private SSH keys or authenticated application sessions. Keep your Git remote and Proton account recovery methods accessible independently of the laptop.
+
+## Releases
+
+The intended first stable baseline is **`v1.0.0`**. Once the strict health audit passes, provisioning is idempotent and all intended changes are committed, create an annotated tag:
+
+```sh
+git status --short
+git tag -a v1.0.0 -m "Ubuntu Workstations v1.0.0 - stable baseline"
+git show v1.0.0 --no-patch
+```
+
+If the tag already exists, **inspect it instead of recreating it**. Push only to your verified Git remote, if configured:
+
+```sh
+git remote -v
+git push origin main
+git push origin v1.0.0
+```
+
+This is a **personal configuration repository**, not a universal Ubuntu installer. Adapt inventory, paths and optional services to the target workstation before running it.
