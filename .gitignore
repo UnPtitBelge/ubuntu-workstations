@@ -1,21 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Ansible
 *.retry
-*.log
 
 # Secrets
 .env
 .env.*
 !.env.example
-*.pem
-*.key
-*.p12
+*.secret
+*.secrets
 
-# Python
-.venv/
-__pycache__/
+# Fish machine-specific state
+fish_variables
 
-# IDE
+# Backup files
+*.bak
+*.backup
+*~
+
+# Editor files
+.vscode/
 .idea/
-
-# OS
-.DS_Store
