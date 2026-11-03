@@ -79,4 +79,4 @@ workstation_gnome_resource_monitor_settings:
 
 # A reproducible shortcut; overrides user's custom shortcuts list if enabled.
 workstation_gnome_manage_ghostty_shortcut: true
-workstation_gnome_ghostty_binding: '<Super>Return'
+workstation_gnome_ghostty_binding: '<Control><Alt>t'
