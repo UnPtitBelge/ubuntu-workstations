@@ -6,4 +6,5 @@
   roles:
     - base
     - shell
+    - bootstrap
     - languages

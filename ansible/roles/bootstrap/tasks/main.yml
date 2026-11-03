@@ -1,0 +1,118 @@
+---
+- name: Set bootstrap paths
+  ansible.builtin.set_fact:
+    bootstrap_home: "{{ ansible_facts['env']['HOME'] }}"
+    bootstrap_bin: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+    bootstrap_cache: "{{ ansible_facts['env']['HOME'] }}/.cache/workstation-bootstrap"
+
+- name: Ensure user directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ bootstrap_bin }}"
+    - "{{ bootstrap_cache }}"
+
+# ── mise ──────────────────────────────────────
+
+- name: Check mise installation
+  ansible.builtin.stat:
+    path: "{{ bootstrap_bin }}/mise"
+  register: bootstrap_mise
+
+- name: Download mise installer
+  ansible.builtin.get_url:
+    url: https://mise.run
+    dest: "{{ bootstrap_cache }}/install-mise.sh"
+    mode: "0600"
+  when: not bootstrap_mise.stat.exists
+
+- name: Install mise
+  ansible.builtin.command:
+    argv:
+      - sh
+      - "{{ bootstrap_cache }}/install-mise.sh"
+    creates: "{{ bootstrap_bin }}/mise"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+    MISE_VERSION: "v{{ workstation_mise_version }}"
+    MISE_INSTALL_PATH: "{{ bootstrap_bin }}/mise"
+  when: not bootstrap_mise.stat.exists
+
+# ── uv ────────────────────────────────────────
+
+- name: Check uv installation
+  ansible.builtin.stat:
+    path: "{{ bootstrap_bin }}/uv"
+  register: bootstrap_uv
+
+- name: Download uv installer
+  ansible.builtin.get_url:
+    url: https://astral.sh/uv/install.sh
+    dest: "{{ bootstrap_cache }}/install-uv.sh"
+    mode: "0600"
+  when: not bootstrap_uv.stat.exists
+
+- name: Install uv
+  ansible.builtin.command:
+    argv:
+      - sh
+      - "{{ bootstrap_cache }}/install-uv.sh"
+    creates: "{{ bootstrap_bin }}/uv"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+    UV_INSTALL_DIR: "{{ bootstrap_bin }}"
+    UV_NO_MODIFY_PATH: "1"
+  when: not bootstrap_uv.stat.exists
+
+# ── rustup ────────────────────────────────────
+
+- name: Check rustup installation
+  ansible.builtin.stat:
+    path: "{{ bootstrap_home }}/.cargo/bin/rustup"
+  register: bootstrap_rustup
+
+- name: Download rustup installer
+  ansible.builtin.get_url:
+    url: https://sh.rustup.rs
+    dest: "{{ bootstrap_cache }}/install-rustup.sh"
+    mode: "0600"
+  when: not bootstrap_rustup.stat.exists
+
+- name: Install rustup
+  ansible.builtin.command:
+    argv:
+      - sh
+      - "{{ bootstrap_cache }}/install-rustup.sh"
+      - "-y"
+      - "--no-modify-path"
+      - "--default-toolchain"
+      - "none"
+    creates: "{{ bootstrap_home }}/.cargo/bin/rustup"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+  when: not bootstrap_rustup.stat.exists
+
+# ── Verification ──────────────────────────────
+
+- name: Verify installed manager binaries
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bootstrap_bin }}/mise"
+    - "{{ bootstrap_bin }}/uv"
+    - "{{ bootstrap_home }}/.cargo/bin/rustup"
+  register: bootstrap_manager_verification
+  when: not ansible_check_mode
+
+- name: Confirm all managers are installed
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.executable
+    fail_msg: "Missing or non-executable manager: {{ item.item }}"
+  loop: "{{ bootstrap_manager_verification.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
