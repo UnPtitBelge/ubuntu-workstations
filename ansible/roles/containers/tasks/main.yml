@@ -1,0 +1,104 @@
+---
+- name: Ensure APT keyring directory exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Install Docker repository signing key
+  become: true
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Configure Docker APT repository
+  become: true
+  ansible.builtin.deb822_repository:
+    name: docker
+    types:
+      - deb
+    uris:
+      - https://download.docker.com/linux/ubuntu
+    suites:
+      - "{{ ansible_facts['distribution_release'] }}"
+    components:
+      - stable
+    architectures:
+      - "{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' if ansible_facts['architecture'] == 'aarch64' else ansible_facts['architecture'] }}"
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+    enabled: true
+  register: workstation_docker_repository
+
+- name: Install Docker Engine and plugins
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_docker_packages }}"
+    state: present
+    update_cache: "{{ workstation_docker_repository.changed }}"
+    cache_valid_time: 3600
+
+- name: Ensure Docker service is enabled and running
+  become: true
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  when: workstation_docker_manage_service
+
+- name: Check Docker version
+  ansible.builtin.command:
+    argv:
+      - docker
+      - --version
+  register: workstation_docker_version
+  changed_when: false
+  check_mode: false
+
+- name: Check Docker Compose version
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - version
+  register: workstation_compose_version
+  changed_when: false
+  check_mode: false
+
+- name: Check Docker Buildx version
+  ansible.builtin.command:
+    argv:
+      - docker
+      - buildx
+      - version
+  register: workstation_buildx_version
+  changed_when: false
+  check_mode: false
+
+- name: Display Docker versions
+  ansible.builtin.debug:
+    msg:
+      - "{{ workstation_docker_version.stdout }}"
+      - "{{ workstation_compose_version.stdout }}"
+      - "{{ workstation_buildx_version.stdout }}"
+
+- name: Check Containerlab installation
+  ansible.builtin.command:
+    argv:
+      - containerlab
+      - version
+  register: workstation_containerlab_version
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Display Containerlab status
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        workstation_containerlab_version.stdout
+        if workstation_containerlab_version.rc == 0
+        else 'Containerlab is not installed or could not be executed.'
+      }}
