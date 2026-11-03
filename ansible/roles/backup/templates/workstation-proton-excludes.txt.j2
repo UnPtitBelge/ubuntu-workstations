@@ -1,0 +1,4 @@
+# Maintained by Ansible. Edit workstation_backup_excludes in role vars.
+{% for pattern in workstation_backup_excludes %}
+{{ pattern }}
+{% endfor %}

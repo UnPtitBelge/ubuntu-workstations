@@ -1,0 +1,137 @@
+---
+- name: Ensure Proton Drive backup is not configured for an invalid location
+  ansible.builtin.assert:
+    that:
+      - workstation_backup_remote_parent is match('^/my-files/[^\\s]+')
+      - workstation_backup_remote_parent != '/my-files'
+      - "'..' not in workstation_backup_remote_parent.split('/')"
+      - workstation_backup_sources | length > 0
+      - workstation_backup_sources | unique | list | length == workstation_backup_sources | length
+      - workstation_backup_folder_conflict_strategy == 'merge'
+      - workstation_backup_file_conflict_strategy == 'create-new-revision'
+      - workstation_backup_proton_cli is match('^/')
+    fail_msg: 'Check the Proton Drive target, source directories and CLI path.'
+  when: workstation_backup_enabled | bool
+
+- name: Detect legacy Restic timer file from Phase 23
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-restic-backup.timer"
+  register: old_restic_timer
+  when: workstation_backup_cleanup_legacy_restic | bool
+
+- name: Stop and disable previous Phase 23 Restic timer when present
+  ansible.builtin.systemd_service:
+    name: workstation-restic-backup.timer
+    scope: user
+    enabled: false
+    state: stopped
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - workstation_backup_cleanup_legacy_restic | bool
+    - old_restic_timer.stat.exists | default(false)
+    - not ansible_check_mode
+
+- name: Remove only deployed legacy Restic artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-restic-backup.timer"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-restic-backup.service"
+    - "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-restic-backup"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/restic/sources.txt"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/restic/excludes.txt"
+  when: workstation_backup_cleanup_legacy_restic | bool
+
+- name: Ensure user-local directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/workstation-proton-backup"
+  when: workstation_backup_enabled | bool
+
+- name: Check Proton Drive CLI executable
+  ansible.builtin.stat:
+    path: "{{ workstation_backup_proton_cli }}"
+  register: proton_cli_stat
+  when: workstation_backup_enabled | bool
+
+- name: Require official Proton Drive CLI installed first
+  ansible.builtin.assert:
+    that:
+      - proton_cli_stat.stat.exists
+      - proton_cli_stat.stat.executable
+    fail_msg: 'Install the proton role first; Proton Drive CLI was not found/executable.'
+  when:
+    - workstation_backup_enabled | bool
+    - not ansible_check_mode
+
+- name: Install rsync for filtered Proton Drive backups
+  become: true
+  ansible.builtin.apt:
+    name: rsync
+    state: present
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive backup exclusion rules
+  ansible.builtin.template:
+    src: workstation-proton-excludes.txt.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/workstation-proton-backup/excludes.txt"
+    mode: '0600'
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive backup script
+  ansible.builtin.template:
+    src: workstation-proton-backup.sh.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-proton-backup"
+    mode: '0700'
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive backup user service
+  ansible.builtin.template:
+    src: workstation-proton-backup.service.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.service"
+    mode: '0644'
+  register: backup_service_result
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive backup user timer
+  ansible.builtin.template:
+    src: workstation-proton-backup.timer.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.timer"
+    mode: '0644'
+  register: backup_timer_result
+  when: workstation_backup_enabled | bool
+
+- name: Manage Proton Drive backup timer (disabled until restore-tested)
+  ansible.builtin.systemd_service:
+    name: workstation-proton-backup.timer
+    scope: user
+    daemon_reload: true
+    enabled: "{{ workstation_backup_timer_enabled | bool }}"
+    state: "{{ 'started' if workstation_backup_timer_enabled else 'stopped' }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - workstation_backup_enabled | bool
+    - not ansible_check_mode
+
+- name: Reload systemd after removing legacy unit files when Proton backup disabled
+  ansible.builtin.systemd_service:
+    scope: user
+    daemon_reload: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - not workstation_backup_enabled | bool
+    - workstation_backup_cleanup_legacy_restic | bool
+    - old_restic_timer.stat.exists | default(false)
+    - not ansible_check_mode

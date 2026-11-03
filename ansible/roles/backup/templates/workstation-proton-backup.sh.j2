@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Credentials stay in the user's authenticated Proton Drive CLI session.
+cli={{ workstation_backup_proton_cli | quote }}
+remote={{ workstation_backup_remote_parent | quote }}
+exclude_file={{ (ansible_facts['env']['HOME'] ~ '/.config/workstation-proton-backup/excludes.txt') | quote }}
+
+usage() {
+  echo 'Usage: workstation-proton-backup [--dry-run|--show-excludes]'
+  echo '  --dry-run: show filtered file counts and sizes; never upload'
+  echo '  --show-excludes: print the Ansible-managed rsync exclude rules'
+}
+mode=backup
+case "${1:-}" in
+  '') ;;
+  --dry-run) mode=preview ;;
+  --show-excludes) mode=excludes ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+[[ -f "$exclude_file" ]] || { echo "ERROR: Missing excludes: $exclude_file" >&2; exit 1; }
+if [[ "$mode" == excludes ]]; then
+  cat "$exclude_file"
+  exit 0
+fi
+command -v rsync >/dev/null || { echo 'ERROR: rsync is not installed.' >&2; exit 1; }
+if [[ "$mode" == backup ]]; then
+  [[ -x "$cli" ]] || { echo 'ERROR: Proton Drive CLI not executable.' >&2; exit 1; }
+fi
+
+# Verify sources before taking any action.
+sources=(
+{% for source in workstation_backup_sources %}
+  {{ source | quote }}
+{% endfor %}
+)
+for source in "${sources[@]}"; do
+  [[ -d "$source" ]] || { echo "ERROR: Missing source directory: $source" >&2; exit 1; }
+done
+
+# Avoid source collisions: both Documents directories would map to same remote folder.
+declare -A names=()
+for source in "${sources[@]}"; do
+  normalized="${source%/}"
+  name="$(basename "$normalized")"
+  [[ -z "${names[$name]+x}" ]] || { echo "ERROR: Duplicate source basename: $name" >&2; exit 1; }
+  names["$name"]=1
+done
+
+if [[ "$mode" == preview ]]; then
+  echo 'DRY RUN — no files will be uploaded.'
+  for source in "${sources[@]}"; do
+    echo "Filtered preview: $source"
+    # rsync requires an actual directory destination, even in dry-run.
+    preview_dest="$(mktemp -d)"
+    rsync -a -n -m --no-links --stats --exclude-from="$exclude_file" "${source%/}/" "$preview_dest/"
+    rmdir "$preview_dest"
+  done
+  exit 0
+fi
+
+# Lock prevents overlapping timer and manual executions.
+lockdir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[[ -d "$lockdir" ]] || { echo 'ERROR: User runtime directory unavailable.' >&2; exit 1; }
+exec 9>"$lockdir/workstation-proton-backup.lock"
+flock -n 9 || { echo 'ERROR: Another Proton backup is running.' >&2; exit 1; }
+
+# Do not create remote folders or change remote files in response to mistakes.
+"$cli" filesystem list "$remote" >/dev/null || {
+  echo "ERROR: Remote folder inaccessible: $remote" >&2
+  exit 1
+}
+
+cache_home="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$cache_home"
+stage="$(mktemp -d "$cache_home/workstation-proton-backup.XXXXXXXX")"
+chmod 0700 "$stage"
+trap 'rm -rf -- "$stage"' EXIT
+
+for source in "${sources[@]}"; do
+  source="${source%/}"
+  name="$(basename "$source")"
+  dest="$stage/$name"
+  mkdir -p "$dest"
+  # Stage via hardlinks, not a full duplicate, provided the staging location
+  # and source share a filesystem. Never follow symlinks outside the source.
+  if [[ "$(stat -c %d "$source")" != "$(stat -c %d "$stage")" ]]; then
+    echo "ERROR: $source is on another filesystem; refusing full-copy staging." >&2
+    echo 'Use a staging directory on the same filesystem or select a different source.' >&2
+    exit 1
+  fi
+  echo "Preparing filtered backup: $source"
+  rsync -a -m --no-links --link-dest="$source" \
+    --exclude-from="$exclude_file" "$source/" "$dest/"
+  echo "Selected data (logical size): $(du -sh --apparent-size "$dest" | cut -f1)"
+  echo "Uploading: $name"
+  "$cli" filesystem upload "$dest" "$remote" \
+    --folder-conflict-strategy {{ workstation_backup_folder_conflict_strategy | quote }} \
+    --file-conflict-strategy {{ workstation_backup_file_conflict_strategy | quote }}
+  # Avoid accumulating staged directory trees across multiple sources.
+  rm -rf -- "$dest"
+done
+
+echo "Completed filtered Proton Drive backup: $(date --iso-8601=seconds)"

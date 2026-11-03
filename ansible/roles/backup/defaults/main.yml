@@ -1,0 +1,79 @@
+---
+# Phase 23: Proton Drive file backups (not Restic snapshots).
+# On fresh installs, this role can deploy the scripts without running a backup.
+workstation_backup_enabled: true
+workstation_backup_timer_enabled: false
+
+# Must exist in Proton Drive BEFORE the first manual run; the role never creates
+# cloud folders or deletes anything in Proton Drive.
+workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ ansible_facts['hostname'] }}"
+
+# Complete folders are uploaded, preserving their folder names at destination.
+workstation_backup_sources:
+  - "{{ ansible_facts['env']['HOME'] }}/Documents"
+  - "{{ ansible_facts['env']['HOME'] }}/Sync"
+
+# Preserves changed files as Proton Drive revisions (subject to plan limits).
+workstation_backup_folder_conflict_strategy: merge
+workstation_backup_file_conflict_strategy: create-new-revision
+
+# Cron-like systemd schedule, requires your logged-in session/keyring.
+workstation_backup_on_calendar: '*-*-* 20:00:00'
+workstation_backup_randomized_delay: '30m'
+
+# Existing official CLI installed by the proton role.
+workstation_backup_proton_cli: "{{ ansible_facts['env']['HOME'] }}/.local/bin/proton-drive"
+
+# Explicit migration: remove ONLY the old Phase 23's known script/units/files.
+# Never removes a restic repository or password and never uninstalls restic.
+workstation_backup_cleanup_legacy_restic: true
+
+# Ignore patterns use rsync filter syntax. Directory rules ending in / match
+# anywhere below each source. Intentionally do NOT exclude .git/ by default:
+# unpushed commits and branches may exist only on this machine.
+workstation_backup_excludes:
+  # Python
+  - '.venv/'
+  - 'venv/'
+  - 'env/'
+  - '__pycache__/'
+  - '*.pyc'
+  - '*.pyo'
+  - '*.pyd'
+  - '.pytest_cache/'
+  - '.mypy_cache/'
+  - '.ruff_cache/'
+  - '.hypothesis/'
+  - '.tox/'
+  - '.nox/'
+  - '*.egg-info/'
+  - '.coverage'
+  - '.coverage.*'
+  - 'htmlcov/'
+  # JS / front-end
+  - 'node_modules/'
+  - '.npm/'
+  - '.pnpm-store/'
+  - '.yarn/cache/'
+  - '.next/'
+  - '.nuxt/'
+  - '.turbo/'
+  - '.parcel-cache/'
+  # Generated build artifacts (remove these rules if they contain useful files)
+  - 'build/'
+  - 'dist/'
+  - 'target/'
+  - '.gradle/'
+  - '.terraform/'
+  # Cache, sync versioning, OS/editor metadata
+  - '.cache/'
+  - '.stversions/'
+  - '.DS_Store'
+  - 'Thumbs.db'
+  - 'desktop.ini'
+  - '*.swp'
+  - '*.swo'
+  - '*~'
+  - '*.tmp'
+  - '*.log'
+  - '.syncthing.*.tmp'

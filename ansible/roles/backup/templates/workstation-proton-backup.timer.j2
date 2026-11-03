@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily off-site workstation backup to Proton Drive
+
+[Timer]
+OnCalendar={{ workstation_backup_on_calendar }}
+RandomizedDelaySec={{ workstation_backup_randomized_delay }}
+Persistent=true
+Unit=workstation-proton-backup.service
+
+[Install]
+WantedBy=timers.target
