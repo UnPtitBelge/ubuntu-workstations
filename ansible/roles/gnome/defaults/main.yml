@@ -1,0 +1,38 @@
+---
+workstation_wallpaper_filename: desktop.png
+
+workstation_gnome_settings:
+  - schema: org.gnome.desktop.interface
+    key: accent-color
+    value: orange
+    expected: "'orange'"
+
+  - schema: org.gnome.desktop.interface
+    key: enable-hot-corners
+    value: "false"
+    expected: "false"
+
+  - schema: org.gnome.desktop.interface
+    key: clock-format
+    value: "24h"
+    expected: "'24h'"
+
+  - schema: org.gnome.desktop.interface
+    key: show-battery-percentage
+    value: "true"
+    expected: "true"
+
+  - schema: org.gnome.mutter
+    key: center-new-windows
+    value: "true"
+    expected: "true"
+
+  - schema: org.gnome.mutter
+    key: dynamic-workspaces
+    value: "true"
+    expected: "true"
+
+  - schema: org.gnome.desktop.wm.preferences
+    key: button-layout
+    value: "icon:minimize,maximize,close"
+    expected: "'icon:minimize,maximize,close'"
