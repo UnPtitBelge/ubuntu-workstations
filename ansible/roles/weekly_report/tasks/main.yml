@@ -1,0 +1,42 @@
+---
+- name: Create weekly workstation report directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-weekly-report"
+
+- name: Install read-only consolidated report checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-weekly-report.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-weekly-report"
+    mode: '0755'
+
+- name: Install weekly report systemd service
+  become: false
+  ansible.builtin.template:
+    src: workstation-weekly-report.service.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-weekly-report.service"
+    mode: '0644'
+
+- name: Install weekly report systemd timer
+  become: false
+  ansible.builtin.template:
+    src: workstation-weekly-report.timer.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-weekly-report.timer"
+    mode: '0644'
+
+- name: Enable weekly workstation report timer
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-weekly-report.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode

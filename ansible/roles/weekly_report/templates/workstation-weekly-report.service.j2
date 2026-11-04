@@ -1,0 +1,6 @@
+[Unit]
+Description=Read-only weekly workstation maintenance report
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-weekly-report --max-age-hours {{ workstation_weekly_report_max_source_age_hours | int }}

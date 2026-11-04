@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly workstation maintenance report
+
+[Timer]
+OnCalendar={{ workstation_weekly_report_calendar }}
+Persistent=true
+RandomizedDelaySec={{ workstation_weekly_report_randomized_delay }}
+Unit=workstation-weekly-report.service
+
+[Install]
+WantedBy=timers.target

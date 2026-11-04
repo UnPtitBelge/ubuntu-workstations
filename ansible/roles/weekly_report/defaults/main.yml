@@ -1,0 +1,5 @@
+---
+# Source reports are expected to be generated daily by the existing roles.
+workstation_weekly_report_max_source_age_hours: 48
+workstation_weekly_report_calendar: 'Sun *-*-* 10:00:00'
+workstation_weekly_report_randomized_delay: '20m'
