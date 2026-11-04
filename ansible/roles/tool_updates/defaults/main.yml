@@ -1,0 +1,4 @@
+---
+workstation_tool_updates_packages:
+  - docker-ce
+  - proton-vpn-gnome-desktop

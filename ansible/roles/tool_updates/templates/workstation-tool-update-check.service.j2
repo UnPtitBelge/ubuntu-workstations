@@ -1,0 +1,6 @@
+[Unit]
+Description=Read-only workstation development tool update report
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-tool-update-check{% for package in workstation_tool_updates_packages %} --apt-package {{ package }}{% endfor %}

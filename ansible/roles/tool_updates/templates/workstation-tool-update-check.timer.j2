@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly workstation development tool update discovery
+
+[Timer]
+OnCalendar=Sun *-*-* 11:00:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=workstation-tool-update-check.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,42 @@
+---
+- name: Create development update report directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-tool-updates"
+
+- name: Install read-only development update checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-tool-update-check.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-tool-update-check"
+    mode: '0755'
+
+- name: Install development update check service
+  become: false
+  ansible.builtin.template:
+    src: workstation-tool-update-check.service.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-tool-update-check.service"
+    mode: '0644'
+
+- name: Install development update check timer
+  become: false
+  ansible.builtin.template:
+    src: workstation-tool-update-check.timer.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-tool-update-check.timer"
+    mode: '0644'
+
+- name: Enable weekly development update checks
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-tool-update-check.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode
