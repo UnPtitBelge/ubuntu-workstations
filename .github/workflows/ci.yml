@@ -1,0 +1,49 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  static-checks:
+    name: YAML / Python / Ansible static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install check dependencies
+        run: pip install ansible-core PyYAML
+      - name: Repository audit (read-only)
+        run: python3 scripts/audit-workstation.py .
+      - name: Compile all Python files
+        run: find ansible scripts -name '*.py' -print0 | xargs -0 python3 -m py_compile
+      - name: Ansible syntax checks
+        run: |
+          cd ansible
+          ansible-playbook playbooks/workstation.yml --syntax-check
+          ansible-playbook playbooks/validate-workstation.yml --syntax-check
+          ansible-playbook playbooks/rehearsal-headless.yml --syntax-check
+      - name: Inventory parses
+        run: cd ansible && ansible-inventory -i inventory/hosts.yml --graph

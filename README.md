@@ -36,14 +36,20 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 
 ```text
 .
+├── .github/workflows/               # CI: gitleaks secret scan + YAML/Python/Ansible static checks
+├── .gitattributes                   # LF normalization; binary assets untouched
+├── LICENSE                          # MIT
+├── SECURITY.md                      # private vulnerability reporting
+├── CONTRIBUTING.md                  # change and validation workflow
 ├── ansible/
 │   ├── ansible.cfg
 │   ├── inventory/
-│   │   ├── hosts.yml
+│   │   ├── hosts.yml (+ hosts.yml.example for new machines)
 │   │   ├── group_vars/all.yml
 │   │   └── host_vars/
 │   │       ├── desktop.yml
-│   │       └── laptop.yml
+│   │       ├── laptop.yml
+│   │       └── *.yml.example           # inert per-host templates
 │   ├── playbooks/
 │   │   ├── workstation.yml             # Main provisioning
 │   │   ├── validate-workstation.yml    # Strict workstation validation
@@ -83,7 +89,7 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 │   ├── WORKSTATION-RECOVERY.md
 │   ├── REPOSITORY-AUDIT.md
 │   └── v1.2.0-release-checklist.md
-└── scripts/audit-workstation.py
+└── scripts/                             # repository utilities (read-only audit, bootstrap, maintenance gate)
 ```
 
 The tree above describes the intended v1.2.0 layout; optional assets and documentation may vary. Shared defaults belong in role defaults and `inventory/group_vars/all.yml`; host-specific settings belong in `inventory/host_vars/`. Don't copy device IDs, application sessions or credentials between machines.
@@ -237,6 +243,8 @@ Syncthing uses its own identity on each machine. Pair devices through <http://12
 
 Proton Drive, Pass, Mail and VPN are installed/configured by their respective roles as applicable, but **sign-in remains interactive and machine-local**. Do not commit account tokens or password-store data.
 
+**External services and accounts:** Proton VPN, Drive, Pass and Mail require a Proton account (Drive storage and VPN need a paid plan); Syncthing needs a second paired device but no account; package installation uses the public Ubuntu, Docker and Proton APT repositories plus upstream project sites (mise, uv, rustup, containerlab, GitHub releases). No role embeds credentials or sends data anywhere except the explicitly configured Proton Drive backup destination.
+
 The backup destination is machine-specific:
 
 ```text
@@ -287,6 +295,10 @@ The optional `rehearsal-headless.yml` playbook tests foundational provisioning i
 - **[Recovery guide](docs/WORKSTATION-RECOVERY.md)** — restore drills and workstation reconstruction.
 - **[Repository audit](docs/REPOSITORY-AUDIT.md)** — configuration inspection and cleanup procedures.
 - **[v1.2.0 release checklist](docs/v1.2.0-release-checklist.md)** — release acceptance checks.
+- **[Ubuntu 26.04 compatibility notes](docs/ubuntu-26.04-compatibility.md)** — known platform quirk (`sudo-rs` vs Ansible).
+- **[Public release audit](docs/PUBLIC-RELEASE-AUDIT.md)** — security, privacy and portability findings before publishing this repository.
+- **[Security policy](SECURITY.md)** — how to report a vulnerability privately.
+- **[Contributing](CONTRIBUTING.md)** — ground rules and validation workflow for proposed changes.
 
 ## Releases
 

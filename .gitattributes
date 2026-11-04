@@ -1,0 +1,9 @@
+# Normalize all text files to LF in the repository and in working trees.
+* text=auto eol=lf
+
+# Binary assets must never be renormalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary

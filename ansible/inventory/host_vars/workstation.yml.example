@@ -1,0 +1,15 @@
+---
+# Generic per-host variables for a new workstation.
+# Copy to host_vars/<your-inventory-name>.yml. This .example file is never
+# loaded by Ansible. Keep secrets, device identities and credentials out of
+# Git; enroll them manually on each machine.
+
+workstation_device_class: desktop      # or: laptop
+workstation_device_name: ""            # actual hostname of this machine
+
+workstation_syncthing_enabled: true
+
+# Enable backups only after Proton Drive sign-in and a tested restore;
+# keep the timer disabled on a first run (see docs/WORKSTATION-INSTALL.md).
+workstation_backup_enabled: true
+workstation_backup_timer_enabled: false

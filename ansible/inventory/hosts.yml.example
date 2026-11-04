@@ -1,0 +1,15 @@
+---
+# Generic example inventory for a fresh Ubuntu workstation.
+# This file is not loaded by ansible.cfg (which points at hosts.yml);
+# copy the block below into hosts.yml or your own inventory and rename the host.
+#
+# Provisioning is local: run Ansible on the machine being configured and
+# use --limit with that machine's inventory name.
+all:
+  children:
+    workstations:
+      hosts:
+        workstation:                 # inventory name; use with --limit workstation
+          ansible_connection: local
+          ansible_host: localhost
+          ansible_python_interpreter: "{{ ansible_playbook_python }}"

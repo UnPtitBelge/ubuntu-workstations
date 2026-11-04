@@ -76,7 +76,7 @@ mkdir -p ~/Projects
 ## 3. Adding a third machine today (partially manual)
 
 1. **Inventory:** Add a unique host entry to `ansible/inventory/hosts.yml`, with an explicit inventory name, real hostname, and the same local-connection conventions used by `desktop`/`laptop`. Do not duplicate a host's identity. Confirm with `ansible-inventory --host <new-host>`.
-2. **Host overrides:** Create `ansible/inventory/host_vars/<new-host>.yml` using the nearest existing host as a *template for nonsecret settings only*. Remove laptop/desktop-only assumptions, hard-coded paths, displays and backup destinations. Prefer shared settings from `group_vars/all.yml`.
+2. **Host overrides:** Create `ansible/inventory/host_vars/<new-host>.yml` using the nearest existing host as a *template for nonsecret settings only*. Remove laptop/desktop-only assumptions, hard-coded paths, displays and backup destinations. Prefer shared settings from `group_vars/all.yml`. Generic starting points are provided as inert `.example` files that Ansible never loads: `ansible/inventory/hosts.yml.example` and `ansible/inventory/host_vars/workstation.yml.example`.
 3. **Capabilities:** Audit each role's `when:` conditions and defaults. At `v1.2.0`, Proton and backup-monitoring logic still have provider-specific expectations, so a third host that opts out may need a reviewed playbook change.
 4. **Bootstrap:** Install prerequisite packages and clone the repo on the new host. Authenticate the Git remote without sharing SSH private keys from another computer.
 5. **Dry run → real run:** From the new host, run syntax check, `--check --diff`, then the actual playbook with `--limit <new-host>`. Never run another local inventory host from the wrong machine.

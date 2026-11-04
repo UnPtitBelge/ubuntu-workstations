@@ -1,6 +1,0 @@
-[Unit]
-Description=Workstation health check
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/workstation-health-check
