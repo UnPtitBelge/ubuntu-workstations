@@ -1,6 +1,6 @@
 # DEPLOY — From two named workstations to a reusable Ubuntu profile
 
-**Status:** Based on the working, public `v1.3.0` repository. It provisions `Omnissiah-desktop` (`desktop`) and `Omnissiah-pocket` (`laptop`), and ships reusable **profiles** (`profiles/`) plus a fill-in onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`) so a third party can add a machine with inventory/profile data only. Enrollment of credentials, device identities and backup destinations is still manual, so this is **not** a fully unattended installer.
+**Status:** Based on the working, public `v1.3.0` repository. It provisions `my-desktop` (`desktop`) and `my-laptop` (`laptop`), and ships reusable **profiles** (`profiles/`) plus a fill-in onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`) so a third party can add a machine with inventory/profile data only. Enrollment of credentials, device identities and backup destinations is still manual, so this is **not** a fully unattended installer.
 
 See [TODO.md](TODO.md) for the implementation backlog and [MIGRATE.md](MIGRATE.md) for changing providers after deployment. For existing operational commands, see [WORKSTATION-CHEATSHEET.md](WORKSTATION-CHEATSHEET.md).
 
@@ -37,9 +37,9 @@ Most maintenance timers are **systemd user units**. `Linger=yes` allows user ser
 Run these **on the machine being configured**, from its own login; don't target the other machine using an inventory entry with `ansible_connection: local`.
 
 ```fish
-# On Omnissiah-desktop:
+# On my-desktop:
 set target desktop
-# On Omnissiah-pocket, instead:
+# On my-laptop, instead:
 # set target laptop
 
 cd ~/Projects/ubuntu-workstations
@@ -81,7 +81,7 @@ mkdir -p ~/Projects
 
 **Do not paste a sample `git clone` URL as-is.** Keep bootstrap secrets, private keys and personal credentials out of Git.
 
-**Machine identity:** each host declares a unique `workstation_device_name` in `host_vars/<host>.yml`. The playbook asserts it matches the runtime hostname and that no two inventory hosts share one; backup destinations derive from it. `scripts/setup-workstation.py` refuses a hostname already declared by another host.
+**Machine identity:** the runtime hostname (`ansible_facts['hostname']`) is the machine identity and is never stored in Git; backup destinations derive from it. To pin it explicitly, set `workstation_device_name` in a gitignored per-host override `ansible/inventory/host_vars/<host>/local.yml` (the directory `ansible/inventory/host_vars/*/` is gitignored; `scripts/setup-workstation.py` writes it there) — the playbook then asserts it matches the runtime hostname and that no two inventory hosts declare the same one. Placeholder values (`<...>`) are ignored by both assertions. `scripts/setup-workstation.py` refuses a hostname already declared by another host.
 
 ## 3. Adding a third machine today (partially manual)
 

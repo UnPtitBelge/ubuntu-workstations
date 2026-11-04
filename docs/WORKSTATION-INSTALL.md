@@ -44,7 +44,7 @@ cat inventory/hosts.yml
 ansible-inventory --graph
 ```
 
-- Keep the existing laptop entry as-is on `Omnissiah-pocket`.
+- Keep the existing laptop entry as-is on `my-laptop`.
 - For the new desktop, add its **actual** host entry and `inventory/host_vars/desktop.yml` from your template. Do not invent a hostname/IP now. For local provisioning the active host should use `ansible_connection: local` or the equivalent current inventory setting.
 - Shared settings belong in `inventory/group_vars/all.yml`; actual machine differences belong in `inventory/host_vars/<inventory-name>.yml`.
 - Confirm that `proton` precedes `backup`, and `hardware` precedes the roles which inspect its facts.

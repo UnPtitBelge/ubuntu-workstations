@@ -1,9 +1,11 @@
 ---
-# Omnissiah-pocket
 # Laptop-specific workstation settings.
 
 workstation_device_class: laptop
-workstation_device_name: Omnissiah-pocket
+# Machine identity: the runtime hostname is used by default and is never stored
+# in Git. To pin it explicitly, put it in a gitignored
+# host_vars/laptop/local.yml:
+#   workstation_device_name: <your-hostname>
 
 # Display configuration remains hardware-specific.
 # Do not enforce monitor layout or fractional scaling.

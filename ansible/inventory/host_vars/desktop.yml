@@ -2,7 +2,11 @@
 # Desktop workstation
 
 workstation_device_class: desktop
-workstation_device_name: Omnissiah-desktop
+# Machine identity: the runtime hostname is used by default and is never stored
+# in Git. To pin it explicitly (the playbook then asserts it matches the runtime
+# hostname and is unique across the inventory), put it in a gitignored
+# host_vars/desktop/local.yml:
+#   workstation_device_name: <your-hostname>
 
 # Preserve independent Syncthing configuration.
 workstation_syncthing_enabled: true

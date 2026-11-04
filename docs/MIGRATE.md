@@ -73,7 +73,7 @@ Since `v1.3.0`, the backup capability is selected by `workstation_providers.back
 
 ### Preflight
 
-- Confirm both unique source destinations: `/my-files/Workstation-Backups/Omnissiah-desktop/` and `/my-files/Workstation-Backups/Omnissiah-pocket/` (or their actual configured hostnames).
+- Confirm both unique source destinations: `/my-files/Workstation-Backups/my-desktop/` and `/my-files/Workstation-Backups/my-laptop/` (or their actual configured hostnames).
 - Read the backup include/exclude rules. Determine whether the copy is a revisioned file upload, not a point-in-time snapshot; identify what has never been backed up (e.g., Docker volumes or encrypted session stores).
 - Choose the destination architecture: local/remote storage, encryption at rest **and before upload if required**, retention, pruning policy, restore process and cost. Do not assume the new backend implements Proton revisions.
 - Restore a source sample to a **separate** directory and compare it. For an independent historical archive, decide whether and how old Proton revisions can be exported; they may require provider-specific manual steps.
@@ -202,7 +202,7 @@ Backup status record (written by every backup provider to `~/.local/state/workst
   "schema_version": 1,
   "capability": "backup",
   "provider": "proton/drive",
-  "host": "Omnissiah-desktop",
+  "host": "my-desktop",
   "dataset_id": "home-selected",
   "checked_at": "<ISO-8601 timestamp>",
   "result": "success",
@@ -218,7 +218,7 @@ Dataset manifest (written per run to `~/.local/state/workstation-backup/manifest
 {
   "schema_version": 1,
   "dataset_id": "home-selected",
-  "host": "Omnissiah-desktop",
+  "host": "my-desktop",
   "generated_at": "<ISO-8601 timestamp>",
   "file_count": 12345,
   "total_bytes": 678901234,

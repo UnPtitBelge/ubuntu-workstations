@@ -8,8 +8,10 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 
 | Inventory host | Machine | Role in the workflow |
 | --- | --- | --- |
-| `desktop` | `Omnissiah-desktop` | Primary development and configuration machine |
-| `laptop` | `Omnissiah-pocket` | Secondary workstation; receives reviewed changes from Git |
+| `desktop` | `my-desktop` (placeholder — your real hostname stays machine-local, never committed) | Primary development and configuration machine |
+| `laptop` | `my-laptop` (placeholder) | Secondary workstation; receives reviewed changes from Git |
+
+Machine names in the docs (`my-desktop`, `my-laptop`) are placeholders. Your real hostnames are taken from the runtime at provisioning time and are never stored in Git; optionally pin them in a gitignored `ansible/inventory/host_vars/<host>/local.yml` (see [DEPLOY.md](docs/DEPLOY.md) §2).
 
 > **Start here:** [Command cheatsheet](docs/WORKSTATION-CHEATSHEET.md) · [Routine maintenance checklist](docs/WORKSTATION-ROUTINE-CHECKLIST.md) · [Deployment & portability](docs/DEPLOY.md) · [Provider migration](docs/MIGRATE.md) · [Roadmap / TODO](docs/TODO.md) · [Installation](docs/WORKSTATION-INSTALL.md) · [Recovery](docs/WORKSTATION-RECOVERY.md)
 
@@ -139,10 +141,10 @@ Replace `<YOUR_GIT_REMOTE_URL>` with your actual private/public repository remot
 ### 2. Select the correct machine
 
 ```fish
-# On Omnissiah-desktop:
+# On my-desktop:
 set target desktop
 
-# On Omnissiah-pocket, use instead:
+# On my-laptop, use instead:
 # set target laptop
 
 ansible-inventory -i inventory/hosts.yml --graph
@@ -280,8 +282,8 @@ Proton Drive, Pass, Mail and VPN are installed/configured by their respective ro
 The backup destination is machine-specific:
 
 ```text
-/my-files/Workstation-Backups/Omnissiah-desktop/
-/my-files/Workstation-Backups/Omnissiah-pocket/
+/my-files/Workstation-Backups/my-desktop/
+/my-files/Workstation-Backups/my-laptop/
 ```
 
 Scheduled backups are enabled on both workstations. Review selection/exclusions via `workstation_backup_sources` / `workstation_backup_excludes` (defined in `ansible/inventory/group_vars/all.yml`, with provider-specific defaults in e.g. `ansible/roles/providers/proton/drive/defaults/main.yml`) and host variables; do not assume that every personal file, Docker volume or VM disk is included.

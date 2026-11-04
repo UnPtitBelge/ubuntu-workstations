@@ -23,6 +23,10 @@
           ansible-core {{ ansible_version.full }}, Python {{ ansible_facts['python_version'] }}.
           See docs/DEPLOY.md section 2 (prerequisites and release compatibility).
 
+    # Machine identity: the runtime hostname is the default identity and is
+    # never stored in Git. A host may optionally pin workstation_device_name
+    # (e.g. in a gitignored host_vars/<host>/local.yml); placeholder values
+    # starting with '<' are skipped by both assertions below.
     - name: Assert the declared machine identity matches this host
       ansible.builtin.assert:
         that:
@@ -31,24 +35,33 @@
           Declared workstation_device_name '{{ workstation_device_name | default('') }}'
           does not match the runtime hostname '{{ ansible_facts['hostname'] }}'.
           Fix the inventory/host_vars entry for this machine; do not clone identities between hosts.
+      when:
+        - (workstation_device_name | default('')) != ''
+        - not (workstation_device_name | default('') is match('^<'))
 
     - name: Gather declared machine identities of all inventory hosts
       ansible.builtin.set_fact:
-        workstation_inventory_identities: >-
-          {{ workstation_inventory_identities | default([])
-             + [hostvars[item]['workstation_device_name'] | default('<<missing>>')] }}
+        workstation_all_identities: >-
+          {{ workstation_all_identities | default([])
+             + [hostvars[item]['workstation_device_name'] | default('')] }}
       loop: "{{ groups['workstations'] }}"
 
-    - name: Assert unique machine identities across the whole inventory
+    - name: Assert unique declared machine identities across the whole inventory
       ansible.builtin.assert:
         that:
-          - workstation_inventory_identities | unique | length == workstation_inventory_identities | length
+          - workstation_declared_identities | unique | length == workstation_declared_identities | length
           - groups['workstations'] | unique | length == groups['workstations'] | length
         fail_msg: >-
-          Duplicate machine identity across inventory hosts:
-          {{ workstation_inventory_identities | join(', ') }}.
-          Every host needs a unique workstation_device_name (host_vars/<host>.yml);
-          provisioning must never clone hostname, backup destination or device identity.
+          Duplicate declared workstation_device_name across inventory hosts:
+          {{ workstation_declared_identities | join(', ') }}.
+          Each machine needs a unique declared identity (pin it in a gitignored
+          host_vars/<host>/local.yml); provisioning must never clone hostname,
+          backup destination or device identity.
+      vars:
+        # Empty (runtime-facts fallback) and '<placeholder>' values are not
+        # declared identities and are excluded from the uniqueness check.
+        workstation_declared_identities: >-
+          {{ workstation_all_identities | select('ne', '') | reject('match', '^<') | list }}
 
     - name: Discover available profiles
       ansible.builtin.find:

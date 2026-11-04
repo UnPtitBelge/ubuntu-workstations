@@ -16,6 +16,10 @@ __pycache__/
 # Local fill-in data for scripts/setup-workstation.py (personal values, never commit)
 /setup.local.yml
 
+# Per-host local overrides (e.g. workstation_device_name with the real hostname,
+# written by scripts/setup-workstation.py — machine identity never goes to Git)
+ansible/inventory/host_vars/*/
+
 # Fish machine-specific state
 fish_variables
 

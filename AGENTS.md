@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this file **b
 
 - **Project:** Personal, reproducible Ubuntu 26.04 LTS workstations managed with **Ansible + Git**.
 - **Current released baseline:** `v1.3.0` (public repository). The current working tree may contain post-release changes; inspect Git rather than assuming it matches the tag.
-- **Machines:** `Omnissiah-desktop` (inventory host `desktop`) and `Omnissiah-pocket` (inventory host `laptop`). The usual development machine is the desktop.
+- **Machines:** inventory hosts `desktop` and `laptop` (docs use `my-desktop` / `my-laptop` as hostname placeholders; real hostnames are machine-local and never committed — see `docs/DEPLOY.md` §2). The usual development machine is the desktop.
 - **Shell:** **Fish**, not Bash. Give Fish-compatible *interactive commands*. A script with `#!/usr/bin/env bash` is acceptable when Bash is explicitly chosen and installed; do not present Bash syntax as Fish syntax.
 - **Repo on each machine:** `~/Projects/ubuntu-workstations`. Always confirm the actual working directory, repository status, and target host.
 - **Execution model:** Inventory currently uses **local provisioning**. A command with `--limit laptop` executed on the desktop does **not** remotely provision the laptop. Run Ansible on the intended machine, and use its matching limit.

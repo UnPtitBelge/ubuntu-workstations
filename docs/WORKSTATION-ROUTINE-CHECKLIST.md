@@ -1,6 +1,6 @@
 # Ubuntu Workstations — Routine Maintenance Checklist
 
-**For:** `Omnissiah-desktop` and `Omnissiah-pocket` · **Starting point:** v1.2.x  
+**For:** `my-desktop` and `my-laptop` · **Starting point:** v1.2.x
 **Operating principle:** Let timers do the ordinary work. Investigate alerts; do not manually run every checker every day.
 
 ## ✅ Always-on automation (no manual action when healthy)
@@ -62,11 +62,11 @@ cd ~/Projects/ubuntu-workstations; git status --short
 - [ ] Review filesystem capacity and Docker disk usage **without pruning**.
 - [ ] Confirm Syncthing connects and syncs in both directions.
 - [ ] Review pending reboot status and restart at a convenient time if required.
-- [ ] Confirm backup destinations remain machine-specific (`Omnissiah-desktop` vs `Omnissiah-pocket`).
+- [ ] Confirm backup destinations remain machine-specific (`my-desktop` vs `my-laptop`).
 
 ```fish
 # On the machine you are checking, set the matching host first:
-set target desktop  # On Omnissiah-pocket: set target laptop
+set target desktop  # On my-laptop: set target laptop
 cd ~/Projects/ubuntu-workstations
 
 git describe --tags --always

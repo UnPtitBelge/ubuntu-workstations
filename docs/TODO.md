@@ -1,6 +1,6 @@
 # TODO — Ubuntu Workstations
 
-**Baseline:** `v1.3.0` (public repository) · **Hosts:** `Omnissiah-desktop` (`desktop`) and `Omnissiah-pocket` (`laptop`)
+**Baseline:** `v1.3.0` (public repository) · **Hosts:** `my-desktop` (`desktop`) and `my-laptop` (`laptop`)
 **Purpose:** A prioritized, honest roadmap. Checked items are shipped capabilities; unchecked items are proposed work, **not** implemented features.
 
 > **Operating principle:** Keep both workstations reproducible, observable, recoverable, and provider-independent. Prefer small reviewed Ansible changes over autonomous changes that could destroy data or break access.

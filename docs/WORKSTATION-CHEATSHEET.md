@@ -1,6 +1,6 @@
 # Ubuntu Workstations — Command Cheatsheet
 
-**Applies to:** `Omnissiah-desktop` (inventory host `desktop`) and `Omnissiah-pocket` (`laptop`)  
+**Applies to:** `my-desktop` (inventory host `desktop`) and `my-laptop` (`laptop`)
 **Baseline:** Ubuntu 26.04 LTS · Fish shell · Ansible + Git · v1.2.x  
 **Repository:** `~/Projects/ubuntu-workstations`  
 **Rule:** Run Ansible **on the machine being configured**; `--limit` must match that machine. Commands below are Fish-compatible.
@@ -26,10 +26,10 @@
 Choose **one** target, on the relevant machine:
 
 ```fish
-# On Omnissiah-desktop:
+# On my-desktop:
 set target desktop
 
-# On Omnissiah-pocket, use instead:
+# On my-laptop, use instead:
 # set target laptop
 
 cd ~/Projects/ubuntu-workstations
