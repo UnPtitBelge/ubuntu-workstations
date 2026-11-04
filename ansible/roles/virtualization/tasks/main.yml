@@ -1,9 +1,28 @@
 ---
-- name: Install QEMU utilities
+- name: Install QEMU utilities that do not require KVM
   become: true
   ansible.builtin.apt:
-    name: "{{ workstation_virtualization_packages }}"
+    name: "{{ workstation_virtualization_packages_base }}"
     state: present
+
+- name: Install KVM-capable QEMU system package
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_virtualization_packages_kvm }}"
+    state: present
+  when:
+    - workstation_hardware_has_kvm | default(false) | bool
+      or workstation_hardware_virtualization_role | default('') == 'guest'
+
+- name: Skip KVM-capable QEMU on hardware without virtualization
+  ansible.builtin.debug:
+    msg: >-
+      No /dev/kvm and not a guest VM: skipping {{ workstation_virtualization_packages_kvm | join(', ') }}.
+      Multipass remains installed (it uses its own backend); standalone QEMU
+      guests would fall back to slow emulation, so they are skipped by default.
+  when:
+    - not (workstation_hardware_has_kvm | default(false) | bool
+           or workstation_hardware_virtualization_role | default('') == 'guest')
 
 - name: Ensure Snap support is installed
   become: true

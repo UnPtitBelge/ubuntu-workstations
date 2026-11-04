@@ -72,6 +72,18 @@ def load_data(path: Path) -> dict:
         sys.exit(f"ERROR: '{host}' is reserved for the maintainer's hosts; choose another inventory_host.")
     if not HOSTNAME_RE.match(hostname):
         sys.exit("ERROR: hostname must be a valid hostname (letters, digits, dots, dashes).")
+    # Machine identity must be unique across the inventory (the playbook also
+    # asserts this at provisioning time); fail early here with a clear message.
+    for hv in sorted(HOSTVARS_DIR.glob("*.yml")):
+        if hv.name.endswith(".example"):
+            continue
+        try:
+            existing = yaml.safe_load(hv.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        if isinstance(existing, dict) and existing.get("workstation_device_name") == hostname:
+            sys.exit(f"ERROR: hostname '{hostname}' is already declared by {hv.name}; "
+                     "each machine needs a unique workstation_device_name.")
     if device_class not in ("desktop", "laptop"):
         sys.exit("ERROR: device_class must be 'desktop' or 'laptop'.")
 

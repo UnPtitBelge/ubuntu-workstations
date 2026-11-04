@@ -82,14 +82,21 @@ docker system df
 
 **Do not** interpret `docker system df` as a request to delete images or volumes. Investigate before any cleanup.
 
+## Monthly — restore verification (2 minutes; the drill is automated, you verify it ran)
+
+- [ ] Confirm the monthly restore drill succeeded: `~/.local/bin/workstation-backup-health-check` shows a fresh `Last verified restore`, or `tail -1 ~/.local/state/workstation-backup/restore-tests.jsonl` shows `"result":"success"` this month.
+- [ ] Run the self-tests once after any monitoring change: `~/.local/bin/workstation-desktop-alerts --self-test` and `~/.local/bin/workstation-post-update-validate --self-test` (both must print `SELF-TEST PASSED`).
+- [ ] Run a read-only provider preflight if you plan any provider change: `cd ~/Projects/ubuntu-workstations/ansible; ansible-playbook playbooks/provider-preflight.yml --limit <host>`.
+
 ## Quarterly — recovery drill (20–45 minutes)
 
-- [ ] **Restore test:** restore at least one real Proton Drive file into a separate temporary directory and compare its contents to the original (`cmp`).
+- [ ] **Restore test:** the monthly drill covers one random file automatically; additionally restore at least one real file into a separate temporary directory and compare its contents to the original (`cmp`), e.g. `~/.local/bin/workstation-proton-backup-restore-test` (read-only on the remote).
 - [ ] Verify the restored file belongs to the **correct machine's** backup destination.
+- [ ] Compare the local manifest against the dataset: `jq '{file_count, total_bytes}' ~/.local/state/workstation-backup/manifest-latest.json`.
 - [ ] **Sync test:** create a harmless file in the shared Syncthing folder on one device; confirm arrival on the other, then remove it after both show Up to Date.
-- [ ] Confirm Proton sign-in still works for scheduled backups without opening a terminal or entering credentials interactively.
-- [ ] Validate a login/reboot cycle: user timers return, GNOME alert test works after login.
-- [ ] Read repository recovery instructions; verify access to Git and Proton credentials/recovery material **without storing secrets in the repository**.
+- [ ] Confirm the cloud sign-in still works for scheduled backups without opening a terminal or entering credentials interactively.
+- [ ] Validate a login/reboot cycle: user timers return, and the GNOME alert works **both in a logged-in session and after logout/login** (manual check — lingering alone does not prove delivery): `~/.local/bin/workstation-desktop-alerts --test-notification` after each login.
+- [ ] Read repository recovery instructions; verify access to Git and provider credentials/recovery material **without storing secrets in the repository**.
 
 ```fish
 # On the machine where both restored and source files are present:
@@ -97,6 +104,7 @@ cmp /path/to/original /path/to/restored-copy
 
 # Inspect backup history without starting an upload:
 journalctl --user -u workstation-proton-backup.service --since '90 days ago' --no-pager
+tail -5 ~/.local/state/workstation-backup/history.jsonl
 
 # Test graphical notification (while logged into GNOME):
 ~/.local/bin/workstation-desktop-alerts --test-notification

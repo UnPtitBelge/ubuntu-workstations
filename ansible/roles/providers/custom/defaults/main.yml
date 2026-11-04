@@ -1,3 +1,9 @@
 ---
 # Set by the playbook when this provider is selected for a capability.
 workstation_capability: ""
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: []
+workstation_provider_manual_actions: [install, configure, health, export, import, verify, cutover, disable]

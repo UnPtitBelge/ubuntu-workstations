@@ -117,7 +117,7 @@ systemctl --user --failed --no-pager
 systemctl --failed --no-pager
 ```
 
-**Known user unit names:** `workstation-proton-backup.timer`, `workstation-health.timer`, `workstation-drift.timer`, `workstation-backup-health.timer`, `workstation-weekly-report.timer`, `workstation-desktop-alerts.timer`, `workstation-tool-update-check.timer`, `workstation-tool-update-alerts.timer`, `workstation-post-update-validation.timer`, and `workstation-post-update-validation.path` (the last is a path unit, not a timer).
+**Known user unit names:** `workstation-proton-backup.timer` (+ `workstation-proton-backup-restore-test.timer`; `workstation-rclone-backup.*` for the `google/drive` provider), `workstation-health.timer`, `workstation-drift.timer`, `workstation-backup-health.timer`, `workstation-weekly-report.timer`, `workstation-desktop-alerts.timer`, `workstation-tool-update-check.timer`, `workstation-tool-update-alerts.timer`, `workstation-post-update-validation.timer`, and `workstation-post-update-validation.path` (the last is a path unit, not a timer).
 
 **Safe notification tests:**
 
@@ -140,9 +140,31 @@ systemctl --user show workstation-proton-backup.service -p Result -p ExecMainSta
 # Last recorded successful service run
 stat ~/.local/state/workstation-backup-monitor/last-success
 
-# Backup health without uploading again
+# Backup health without uploading again (shows last run, restore verification, manifest stats)
 ~/.local/bin/workstation-backup-health-check
 journalctl --user -u workstation-proton-backup.service -n 80 --no-pager
+
+# Restore drill (read-only on the remote: downloads ONE small file to a temp dir and compares SHA-256)
+~/.local/bin/workstation-proton-backup-restore-test        # proton/drive; workstation-rclone-backup-restore-test for google/drive
+systemctl --user status workstation-proton-backup-restore-test.timer --no-pager
+cat ~/.local/state/workstation-backup/restore-tests.jsonl  # dated drill results
+jq . ~/.local/state/workstation-backup/status.json          # verified_restore_at, files, bytes
+jq . ~/.local/state/workstation-backup/manifest-latest.json  # per-file SHA-256 of the last backup
+tail -3 ~/.local/state/workstation-backup/history.jsonl     # append-only run history (side-by-side safe)
+
+# Drift: see what changed, acknowledge a deliberate out-of-band edit
+~/.local/bin/workstation-drift-check
+~/.local/bin/workstation-drift-ack --list
+~/.local/bin/workstation-drift-ack "Health check systemd timer"   # mark accepted (still visible as [ACCEPTED])
+cat ~/.local/state/workstation-drift/baseline-updates.jsonl        # provisioning re-baselines (never silent)
+
+# Alert/validation self-tests (no real notification sent, nothing real is modified)
+~/.local/bin/workstation-desktop-alerts --self-test
+~/.local/bin/workstation-post-update-validate --self-test
+
+# Read-only provider preflight inventory (migration stage A; report in ~/.local/state/workstation-migration/)
+cd ~/Projects/ubuntu-workstations/ansible
+ansible-playbook playbooks/provider-preflight.yml --limit desktop
 
 # Proton Drive login/access (requires an authenticated session)
 proton-drive filesystem list /my-files
@@ -152,7 +174,7 @@ systemctl --user is-active syncthing.service
 systemctl --user status syncthing.service --no-pager
 ```
 
-Syncthing GUI: <http://127.0.0.1:8384>. Check both devices show **Up to Date**. Each machine must have its **own** Proton Drive backup destination. For an actual restore test, download a small known file into a separate temporary directory using your working Proton Drive CLI workflow, then compare it with the original (`cmp original restored`). **Do not overwrite the source file to test a restore.**
+Syncthing GUI: <http://127.0.0.1:8384>. Check both devices show **Up to Date**. Each machine must have its **own** backup destination (derived from its declared `workstation_device_name`). The monthly restore drill (`workstation-*-backup-restore-test.timer`) already downloads one random backed-up file to a separate temp dir and compares SHA-256; for a manual test you can run `~/.local/bin/workstation-proton-backup-restore-test` or download a known file with your CLI workflow and `cmp original restored`. **Do not overwrite the source file to test a restore.**
 
 > 🛠️ `systemctl --user start workstation-proton-backup.service` starts a **real backup upload**. Use it intentionally, not as a routine health probe.
 

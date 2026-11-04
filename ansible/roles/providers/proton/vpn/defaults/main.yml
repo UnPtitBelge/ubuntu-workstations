@@ -1,2 +1,8 @@
 ---
 workstation_proton_manage_vpn: true
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: [install, configure, health, disable]
+workstation_provider_manual_actions: [export, import, verify, cutover]

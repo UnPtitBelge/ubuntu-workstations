@@ -50,6 +50,13 @@
     dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-drift-check"
     mode: '0755'
 
+- name: Install drift acknowledge helper
+  become: false
+  ansible.builtin.copy:
+    src: workstation-drift-ack.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-drift-ack"
+    mode: '0755'
+
 - name: Install drift systemd service
   become: false
   ansible.builtin.copy:

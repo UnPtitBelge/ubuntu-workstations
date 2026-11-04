@@ -1,9 +1,12 @@
 ---
-# Install QEMU utilities for standalone virtualization work.
+# QEMU utilities that work without KVM are always installed; the KVM-capable
+# system package is only installed when /dev/kvm exists or the host is itself
+# a VM (see tasks/main.yml — graceful skip otherwise).
 # Multipass itself manages its own QEMU backend.
-workstation_virtualization_packages:
-  - qemu-system-x86
+workstation_virtualization_packages_base:
   - qemu-utils
+workstation_virtualization_packages_kvm:
+  - qemu-system-x86
 
 # Install Multipass from Canonical's stable Snap channel.
 workstation_multipass_channel: latest/stable

@@ -1,2 +1,11 @@
 ---
 workstation_proton_pass_enabled: true
+# The pinned DEB is amd64-only. When false (default), a non-amd64 host skips
+# the install with a clear message; when true, provisioning fails instead.
+workstation_proton_desktop_apps_require_amd64: false
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: [install, configure, health, disable]
+workstation_provider_manual_actions: [export, import, verify, cutover]

@@ -45,6 +45,8 @@ A workstation is composed of distinct *capabilities* and their *providers*. Chan
 | **G. Observation** | Watch logs, user reports, restore tests and notifications during a rollback window. | Stable service and no missing data. |
 | **H. Decommission** | Disable old units and revoke sessions/tokens; delete old remote copies only with explicit approval and proven recovery. | Old provider retired safely. |
 
+> **Stage A is automated (read-only):** `cd ~/Projects/ubuntu-workstations/ansible && ansible-playbook playbooks/provider-preflight.yml --limit <host>` runs `scripts/preflight-collect.py`, which inventories every capability (backup dataset counts/bytes with the same filters as the upload, remote destination, status/manifest/restore-drill state, unit states; Syncthing folders/peers/device-ID prefix; WireGuard handshake; KeePassXC vault; mail client state) without ever printing secrets. Reports are written to `~/.local/state/workstation-migration/` with mode 0600.
+
 ### Migration worksheet (copy per capability)
 
 ```text
@@ -78,10 +80,28 @@ Since `v1.3.0`, the backup capability is selected by `workstation_providers.back
 
 ### Parallel setup and test
 
+Side-by-side is supported by design: the two built-in backup providers use distinct systemd unit names (`workstation-proton-backup.*` vs `workstation-rclone-backup.*`), distinct remote destinations, and append every run to `~/.local/state/workstation-backup/history.jsonl` while `status.json` tracks the currently selected provider — old and new can run concurrently without clobbering each other's success records.
+
+Assisted by `playbooks/migrate-backup.yml` (run on the machine being migrated; `observe` is the default and read-only):
+
+```fish
+cd ~/Projects/ubuntu-workstations/ansible
+# 1. read-only feasibility + current state
+ansible-playbook playbooks/migrate-backup.yml --limit desktop
+# 2. read-only plan: preflight inventory + new provider --dry-run + restore drill of the current provider
+ansible-playbook playbooks/migrate-backup.yml --limit desktop -e migration_mode=prepare -e migration_new_provider=google/drive
+# 3. commit workstation_providers.backup: google/drive in Git, then switch timers (requires explicit confirm; never deletes data)
+ansible-playbook playbooks/migrate-backup.yml --limit desktop -e migration_mode=cutover -e migration_new_provider=google/drive -e migration_confirm=true
+# 4. if anything looks wrong, revert the timers (never deletes data)
+ansible-playbook playbooks/migrate-backup.yml --limit desktop -e migration_mode=rollback -e migration_new_provider=google/drive -e migration_confirm=true
+```
+
+The playbook only manages units and the local audit trail (`~/.local/state/workstation-migration/cutover.jsonl`); the data transfer itself stays manual:
+
 1. Configure the destination's client and authentication on **one host**, without disabling the Proton backup job.
-2. Create an explicit dataset manifest and a deterministic initial transfer; keep a separate backup job name and output path so monitors cannot confuse old and new success states.
-3. Run one real destination backup. Restore several representative files—including a modified file and a nested directory—and compare content and meaningful metadata.
-4. Repeat on the other host with a **distinct** destination; verify backup monitors and GNOME alerts can distinguish both sources.
+2. Every backup run now writes a dataset manifest with per-file SHA-256 (`manifest.json` uploaded next to the dataset, local copy `manifest-latest.json`) — use it for the deterministic initial transfer and for comparing counts/sizes/checksums instead of remote UI totals.
+3. Run one real destination backup. Restore several representative files—including a modified file and a nested directory—and compare content and hashes (the monthly restore drill does one random file automatically; run `~/.local/bin/workstation-proton-backup-restore-test` manually for more).
+4. Repeat on the other host with a **distinct** destination; verify backup monitors and GNOME alerts can distinguish both sources (each provider's units and `history.jsonl` entries are separate).
 
 ### Cutover and rollback
 
@@ -129,9 +149,18 @@ Since `v1.3.0`, the backup capability is selected by `workstation_providers.back
 - For mise/rustup/uv migrations, move version declarations into reviewed inventory/config before changing installed versions; test `node`, `java`, `rustc`, Python and installed CLI tools.
 - Container runtime swaps require an inventory of Compose projects, networks and **persistent volumes**; image export alone does not preserve volume data. Plan application downtime and service-level validation.
 
-## 5. Plug-and-play contracts (schema implemented; more adapters planned)
+## 5. Plug-and-play contracts (implemented; more adapters planned)
 
-The main playbook now selects capabilities and providers (`workstation_capabilities`, `workstation_providers` in `group_vars/all.yml`) and dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/` (see [PROVIDERS.md](PROVIDERS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md)); the built-in adapters today are the Proton, Google, Syncthing, WireGuard and KeePassXC ones plus the guidance-only `custom`. Adding another provider = a new role directory, no playbook edit. Monitoring consumes normalized records (`status.json` for backup, `latest.txt` with an `OVERALL` line for the rest), so it does not bind to Proton-specific units.
+The main playbook selects capabilities and providers (`workstation_capabilities`, `workstation_providers` in `group_vars/all.yml`) and dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/` (see [PROVIDERS.md](PROVIDERS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md)); the built-in adapters today are the Proton, Google, Syncthing, WireGuard and KeePassXC ones plus the guidance-only `custom`. Adding another provider = a new role directory with the contract below, no playbook edit. Monitoring consumes normalized records (`status.json` for backup, `latest.txt` with an `OVERALL` line for the rest), so it does not bind to Proton-specific units.
+
+**Adapter contract (implemented):** each provider role declares in its defaults
+
+```yaml
+workstation_provider_supported_actions: [install, configure, health, disable]   # e.g. backup providers add verify (restore drill)
+workstation_provider_manual_actions: [export, import, verify, cutover]           # whatever the backend does not support
+```
+
+and records it during provisioning at `~/.local/state/workstation-provider/<provider>.json` (`schema_version`, `capability`, `provider`, `supported_actions`, `manual_actions`, `recorded_at`). `workstation.yml` verifies every selected provider recorded its contract, so a contributed provider must state what it implements and what stays manual. Backup providers additionally write the normalized `status.json`, append to `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script.
 
 ```yaml
 # Active schema (defaults reproduce the original Proton + Syncthing setup)
@@ -153,7 +182,7 @@ workstation_migration:
   retain_source: true
 ```
 
-**Proposed adapter contract** (implement per capability, not as one universal data serializer):
+**Adapter actions** (the contract above; implement per capability, not as one universal data serializer). The actions `preflight` and `health` are provided repository-side: `playbooks/provider-preflight.yml` + `scripts/preflight-collect.py` for preflight, and the `workstation_health_*` lists / report sources for health. Provider roles implement `install`/`configure`/`disable` and, for backup, `verify` (restore drill):
 
 | Action | Promise |
 | --- | --- |
@@ -166,7 +195,7 @@ workstation_migration:
 | `cutover` | Switch authoritative services and monitors only after validation; record rollback state. |
 | `disable` | Stop provider services **without deleting data or credentials** by default. |
 
-Sample proposed backup status record:
+Backup status record (written by every backup provider to `~/.local/state/workstation-backup/status.json` and appended to `history.jsonl`):
 
 ```json
 {
@@ -177,11 +206,27 @@ Sample proposed backup status record:
   "dataset_id": "home-selected",
   "checked_at": "<ISO-8601 timestamp>",
   "result": "success",
-  "verified_restore_at": null
+  "verified_restore_at": "<ISO-8601 timestamp or null>",
+  "files": 12345,
+  "bytes": 678901234
 }
 ```
 
-The `result` is only a job status, **not** proof of remote integrity. A separate restore-verification field must never be forged from a successful upload exit code.
+Dataset manifest (written per run to `~/.local/state/workstation-backup/manifest-latest.json` and uploaded as `manifest.json` next to the dataset; `workstation_backup_manifest_enabled: false` disables it):
+
+```json
+{
+  "schema_version": 1,
+  "dataset_id": "home-selected",
+  "host": "Omnissiah-desktop",
+  "generated_at": "<ISO-8601 timestamp>",
+  "file_count": 12345,
+  "total_bytes": 678901234,
+  "files": [{"path": "Documents/notes.txt", "size": 123, "sha256": "<hex>"}]
+}
+```
+
+The `result` is only a job status, **not** proof of remote integrity. `verified_restore_at` is set only by a restore drill that downloaded a remote file and compared its SHA-256 — it must never be forged from a successful upload exit code.
 
 ## 6. Tests required before calling the system provider-independent
 

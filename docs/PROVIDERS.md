@@ -38,7 +38,7 @@ A provider value is a path relative to `ansible/roles/providers/` — either a f
 | passwords | `keepassxc` | `providers/keepassxc` | KeePassXC; vault file at `workstation_keepassxc_vault` (inside backup sources by default) | none (local vault) | vault master password / key file on the machine |
 | any | `custom` | `providers/custom` | guidance-only: prints the provider contract, deploys nothing | — | — |
 
-Both backup providers share the same capability-level variables (`workstation_backup_sources`, `workstation_backup_excludes`, schedule, `workstation_backup_timer_enabled`, `workstation_backup_dataset_id`) and both write the normalized `~/.local/state/workstation-backup/status.json` record that `workstation-backup-health-check` monitors — the monitor follows the selected provider's units automatically. Unit names stay provider-specific (`workstation-proton-backup.*` vs `workstation-rclone-backup.*`) so old and new can run side by side during a migration; do not rename them in place.
+Both backup providers share the same capability-level variables (`workstation_backup_sources`, `workstation_backup_excludes`, schedule, `workstation_backup_timer_enabled`, `workstation_backup_dataset_id`, `workstation_backup_manifest_enabled`, restore-drill schedule) and both write the normalized `~/.local/state/workstation-backup/status.json` record (plus a `history.jsonl` append and an uploaded per-file SHA-256 `manifest.json`) that `workstation-backup-health-check` monitors — the monitor follows the selected provider's units automatically and also warns when the last restore drill (`verified_restore_at`, monthly `workstation-*-backup-restore-test.timer`) is stale. Unit names stay provider-specific (`workstation-proton-backup.*` vs `workstation-rclone-backup.*`) so old and new can run side by side during a migration; do not rename them in place.
 
 ## Using your own provider (self-hosted / any vendor)
 
@@ -62,14 +62,23 @@ ansible/roles/providers/
 ```
 
 1. Create `ansible/roles/providers/<vendor>/<name>/` in **your clone** with at least `tasks/main.yml` (plus `defaults/main.yml` for your variables). Use `_`-prefixed names for shared helper roles inside a vendor directory.
-2. Set `workstation_providers.<capability>: <vendor>/<name>` (or a flat `<name>`).
-3. No playbook edit is needed — the playbook includes `providers/{{ workstation_providers.<capability> }}` and lists every discovered provider in its validation error. See [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider" for the full contract and boundaries.
+2. Declare the adapter contract in `defaults/main.yml` and record it in `tasks/main.yml` (required — the playbook fails the run otherwise):
+
+   ```yaml
+   workstation_provider_supported_actions: [install, configure, health, disable]
+   workstation_provider_manual_actions: [export, import, verify, cutover]
+   ```
+
+   plus the "Record provider adapter contract" task writing `~/.local/state/workstation-provider/<provider>.json` (copy the task from any built-in provider role; `workstation_capability` and `workstation_provider_path` are passed in by the playbook).
+3. Set `workstation_providers.<capability>: <vendor>/<name>` (or a flat `<name>`).
+4. No playbook edit is needed — the playbook includes `providers/{{ workstation_providers.<capability> }}` and lists every discovered provider in its validation error. See [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider" for the full contract and boundaries.
 
 **Provider contract** (full details in [MIGRATE.md](MIGRATE.md) §5):
 
 - Always implement `install` / `configure` / `health`.
-- Implement `export` / `import` / `verify` only where the backend supports them; otherwise state *manual* explicitly — never claim an unsupported operation succeeded.
-- Health output: write `~/.local/state/workstation-<capability>/latest.txt` containing exactly one `OVERALL:` line, and register it in `workstation_report_sources` so the weekly report and GNOME alerts pick it up. Backup providers must additionally write `~/.local/state/workstation-backup/status.json` (schema in MIGRATE.md §5).
+- Implement `export` / `import` / `verify` only where the backend supports them; otherwise list them in `workstation_provider_manual_actions` — never claim an unsupported operation succeeded.
+- Health output: write `~/.local/state/workstation-<capability>/latest.txt` containing exactly one `OVERALL:` line, and register it in `workstation_report_sources` so the weekly report and GNOME alerts pick it up. Backup providers must additionally write `~/.local/state/workstation-backup/status.json` + `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script (schema in MIGRATE.md §5).
+- Preflight inventory is repository-side: extend `scripts/preflight-collect.py` with a section for your provider (never print secrets; truncate device IDs).
 - Secrets stay in `~/.config`, the keyring, or mode-0600 files — never in Git, never in backup sources.
 - Switching providers never deletes data, revokes sessions, or uninstalls the old provider. `disable` stops units and leaves data in place.
 

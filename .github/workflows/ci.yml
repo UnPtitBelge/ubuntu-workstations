@@ -42,8 +42,8 @@ jobs:
       - name: Ansible syntax checks
         run: |
           cd ansible
-          ansible-playbook playbooks/workstation.yml --syntax-check
-          ansible-playbook playbooks/validate-workstation.yml --syntax-check
-          ansible-playbook playbooks/rehearsal-headless.yml --syntax-check
+          for p in workstation validate-workstation rehearsal-headless provider-preflight migrate-backup; do
+            ansible-playbook "playbooks/$p.yml" --syntax-check
+          done
       - name: Inventory parses
         run: cd ansible && ansible-inventory -i inventory/hosts.yml --graph

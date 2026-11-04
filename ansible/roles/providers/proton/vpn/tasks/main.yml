@@ -2,3 +2,28 @@
 - name: Install official Proton VPN
   ansible.builtin.import_tasks: vpn.yml
   when: workstation_proton_manage_vpn | bool
+
+# Adapter contract (docs/MIGRATE.md section 5): record which actions this
+# provider implements vs. which remain manual, so the playbook can verify the
+# record and tools like provider-preflight can consume it.
+- name: Ensure provider contract state directory exists
+  become: false
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider"
+    state: directory
+    mode: '0755'
+  when: not ansible_check_mode
+
+- name: Record provider adapter contract
+  become: false
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider/{{ workstation_provider_path | default(ansible_role_name) | replace('/', '__') }}.json"
+    mode: '0644'
+    content: >-
+      {{ {'schema_version': 1,
+          'capability': workstation_capability | default(''),
+          'provider': workstation_provider_path | default(ansible_role_name),
+          'supported_actions': workstation_provider_supported_actions,
+          'manual_actions': workstation_provider_manual_actions,
+          'recorded_at': ansible_date_time.iso8601 } | to_nice_json }}
+  when: not ansible_check_mode

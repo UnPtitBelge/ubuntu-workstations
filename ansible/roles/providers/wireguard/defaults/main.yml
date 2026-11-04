@@ -10,3 +10,9 @@ workstation_wireguard_interface: wg0
 # Start the tunnel automatically at boot when the config file exists.
 # Keep false to manage the tunnel manually with `sudo wg-quick up <iface>`.
 workstation_wireguard_autostart: false
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: [install, configure, health, disable]
+workstation_provider_manual_actions: [export, import, verify, cutover]

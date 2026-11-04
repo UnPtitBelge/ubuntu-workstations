@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly Proton Drive backup restore drill
+
+[Timer]
+OnCalendar={{ workstation_backup_restore_test_calendar }}
+RandomizedDelaySec={{ workstation_backup_restore_test_randomized_delay }}
+Persistent=true
+Unit=workstation-proton-backup-restore-test.service
+
+[Install]
+WantedBy=timers.target

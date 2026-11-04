@@ -34,6 +34,17 @@
   changed_when: false
   check_mode: false
 
+- name: Inspect power supplies for a battery
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - -c
+      - "grep -l '^Battery$' /sys/class/power_supply/*/type 2>/dev/null | head -1"
+  register: workstation_hardware_battery_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Record workstation hardware and session capabilities
   ansible.builtin.set_fact:
     workstation_hardware_architecture: "{{ ansible_facts['architecture'] }}"
@@ -42,6 +53,7 @@
     workstation_hardware_has_kvm: >-
       {{ (workstation_hardware_kvm_device.stat.exists | default(false))
          and (workstation_hardware_kvm_device.stat.ischr | default(false)) }}
+    workstation_hardware_has_battery: "{{ workstation_hardware_battery_probe.rc == 0 }}"
     workstation_hardware_has_session_bus: >-
       {{ (workstation_hardware_session_bus.stat.exists | default(false))
          and (workstation_hardware_session_bus.stat.issock | default(false)) }}
@@ -56,6 +68,7 @@
       virtualization_role: "{{ workstation_hardware_virtualization_role }}"
       virtualization_type: "{{ workstation_hardware_virtualization_type }}"
       kvm_device_present: "{{ workstation_hardware_has_kvm }}"
+      battery_present: "{{ workstation_hardware_has_battery }}"
       session_bus_present: "{{ workstation_hardware_has_session_bus }}"
       gnome_session_present: "{{ workstation_hardware_has_gnome_session }}"
 

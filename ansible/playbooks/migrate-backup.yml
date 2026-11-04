@@ -1,0 +1,251 @@
+---
+# Assisted backup-provider migration (docs/MIGRATE.md section 3).
+#
+# Modes (select with -e migration_mode=...):
+#   observe  (default)  read-only: current state + feasibility of side-by-side
+#   prepare             read-only: preflight inventory + dry-run of the new
+#                       provider + restore drill of the current provider; writes a plan file
+#   cutover             switch systemd timers to the new provider and record an
+#                       audit entry; REQUIRES -e migration_confirm=true; never deletes data
+#   rollback            reverse a cutover (old timer back on, new timer off);
+#                       REQUIRES -e migration_confirm=true; never deletes data
+#
+# The inventory change (workstation_providers.backup: <new>) is committed
+# separately in Git — this playbook only manages units and the audit trail.
+# Data transfer itself stays manual per docs/MIGRATE.md.
+#
+# Examples (run on the machine being migrated):
+#   ansible-playbook playbooks/migrate-backup.yml --limit desktop
+#   ansible-playbook playbooks/migrate-backup.yml --limit desktop -e migration_mode=prepare -e migration_new_provider=google/drive
+#   ansible-playbook playbooks/migrate-backup.yml --limit desktop -e migration_mode=cutover -e migration_new_provider=google/drive -e migration_confirm=true
+- name: Backup provider migration helper
+  hosts: workstations
+  gather_facts: true
+
+  vars:
+    migration_mode: observe
+    migration_confirm: false
+    migration_new_provider: ""
+    migration_state_dir: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-migration"
+    # provider path -> the systemd units and helper scripts it owns
+    migration_provider_units:
+      proton/drive:
+        timer: workstation-proton-backup.timer
+        service: workstation-proton-backup.service
+        backup_script: workstation-proton-backup
+        restore_test_script: workstation-proton-backup-restore-test
+      google/drive:
+        timer: workstation-rclone-backup.timer
+        service: workstation-rclone-backup.service
+        backup_script: workstation-rclone-backup
+        restore_test_script: workstation-rclone-backup-restore-test
+
+  pre_tasks:
+    - name: Validate the migration mode
+      ansible.builtin.assert:
+        that:
+          - migration_mode in ['observe', 'prepare', 'cutover', 'rollback']
+        fail_msg: "migration_mode must be one of observe, prepare, cutover, rollback (got '{{ migration_mode }}')."
+
+    - name: Require explicit confirmation for cutover/rollback
+      ansible.builtin.assert:
+        that:
+          - migration_confirm | bool
+        fail_msg: >-
+          migration_mode={{ migration_mode }} changes systemd timers.
+          Re-run with -e migration_confirm=true to acknowledge.
+      when: migration_mode in ['cutover', 'rollback']
+
+    - name: Require a target provider for prepare/cutover
+      ansible.builtin.assert:
+        that:
+          - migration_new_provider | length > 0
+          - migration_new_provider in migration_provider_units
+          - migration_new_provider != workstation_providers.backup | default('proton/drive')
+        fail_msg: >-
+          Set -e migration_new_provider=<provider> to a known backup provider
+          ({{ migration_provider_units.keys() | list | join(', ') }}) different from the
+          current one ({{ workstation_providers.backup | default('proton/drive') }}).
+      when: migration_mode in ['prepare', 'cutover']
+
+    - name: Verify side-by-side feasibility (distinct units and destinations)
+      ansible.builtin.assert:
+        that:
+          - migration_provider_units[workstation_providers.backup | default('proton/drive')].timer
+            != migration_provider_units[migration_new_provider].timer
+        fail_msg: >-
+          Old and new provider would use the same systemd timer — side-by-side
+          migration is not safe. Abort and review docs/MIGRATE.md section 3.
+      when: migration_mode in ['prepare', 'cutover']
+
+  tasks:
+    - name: Observe — current backup state (read-only)
+      block:
+        - name: Read normalized backup status record
+          ansible.builtin.slurp:
+            src: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-backup/status.json"
+          register: migration_status_raw
+          failed_when: false
+
+        - name: Show current backup provider state
+          ansible.builtin.debug:
+            msg:
+              - "mode: observe (read-only)"
+              - "current provider: {{ workstation_providers.backup | default('proton/drive') }}"
+              - "current timer: {{ migration_provider_units[workstation_providers.backup | default('proton/drive')].timer }}"
+              - "remote destination: {{ workstation_backup_remote_parent | default(workstation_rclone_remote_parent | default('')) }}"
+              - "dataset: {{ workstation_backup_dataset_id | default('home-selected') }}"
+              - "status record: {{ (migration_status_raw.content | default('') | b64decode | from_json) if migration_status_raw.content is defined else 'none yet' }}"
+              - "sources: {{ workstation_backup_sources | default([]) | join(', ') }}"
+              - "next: run with -e migration_mode=prepare -e migration_new_provider=<provider> to build a plan"
+      when: migration_mode == 'observe'
+
+    - name: Prepare — build a read-only migration plan
+      block:
+        - name: Run the preflight inventory
+          ansible.builtin.command:
+            argv:
+              - python3
+              - "{{ playbook_dir }}/../../scripts/preflight-collect.py"
+              - --home
+              - "{{ ansible_facts['env']['HOME'] }}"
+              - --providers
+              - "{{ workstation_providers | to_json }}"
+              - --backup-sources
+              - "{{ workstation_backup_sources | default([]) | to_json }}"
+              - --remote-parent
+              - "{{ workstation_backup_remote_parent | default(workstation_rclone_remote_parent | default('')) }}"
+              - --dataset-id
+              - "{{ workstation_backup_dataset_id | default('') }}"
+              - --output
+              - "{{ migration_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}_{{ ansible_date_time.time | regex_replace(':', '') }}.txt"
+          register: migration_preflight
+          changed_when: false
+          check_mode: false
+
+        - name: Dry-run the NEW provider's backup (never uploads)
+          ansible.builtin.command:
+            argv: ["{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ migration_provider_units[migration_new_provider].backup_script }}", "--dry-run"]
+          register: migration_new_dry_run
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: Restore drill on the CURRENT provider (read-only on the remote)
+          ansible.builtin.command:
+            argv: ["{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ migration_provider_units[workstation_providers.backup | default('proton/drive')].restore_test_script }}"]
+          register: migration_restore_drill
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: Write the migration plan (local state only)
+          ansible.builtin.copy:
+            dest: "{{ migration_state_dir }}/plan-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}_{{ ansible_date_time.time | regex_replace(':', '') }}.json"
+            mode: '0600'
+            content: >-
+              {{ {'host': ansible_facts['hostname'],
+                  'created_at': ansible_date_time.iso8601,
+                  'from_provider': workstation_providers.backup | default('proton/drive'),
+                  'to_provider': migration_new_provider,
+                  'remote_destination': workstation_backup_remote_parent | default(workstation_rclone_remote_parent | default('')),
+                  'dataset_id': workstation_backup_dataset_id | default('home-selected'),
+                  'new_provider_dry_run_ok': (migration_new_dry_run.rc | default(1)) == 0,
+                  'current_provider_restore_test': migration_restore_drill.stdout | default(''),
+                  'preflight_report_saved': true,
+                  'notes': 'Data transfer is manual (docs/MIGRATE.md section 3). Cutover only switches timers; it never deletes data.'} | to_nice_json }}
+          when: not ansible_check_mode
+
+        - name: Show the prepare summary
+          ansible.builtin.debug:
+            msg:
+              - "mode: prepare (read-only)"
+              - "plan written under {{ migration_state_dir }}/plan-*.json (check mode: skipped)"
+              - "new provider dry-run rc: {{ migration_new_dry_run.rc | default('n/a') }}"
+              - "current provider restore drill rc: {{ migration_restore_drill.rc | default('n/a') }}"
+              - "if both are acceptable, commit workstation_providers.backup={{ migration_new_provider }} in Git, then run cutover with migration_confirm=true"
+      when: migration_mode == 'prepare'
+
+    - name: Cutover — provision the new provider and switch timers
+      block:
+        - name: Provision the new backup provider role
+          ansible.builtin.include_role:
+            name: "providers/{{ migration_new_provider }}"
+          vars:
+            workstation_capability: backup
+            workstation_provider_path: "{{ migration_new_provider }}"
+
+        - name: Stop and disable the OLD provider timer (data untouched)
+          ansible.builtin.systemd_service:
+            name: "{{ migration_provider_units[workstation_providers.backup | default('proton/drive')].timer }}"
+            scope: user
+            daemon_reload: true
+            enabled: false
+            state: stopped
+          environment:
+            XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+          when: not ansible_check_mode
+
+        - name: Record the cutover in the local migration journal
+          ansible.builtin.lineinfile:
+            path: "{{ migration_state_dir }}/cutover.jsonl"
+            line: >-
+              {{ {'time': ansible_date_time.iso8601, 'host': ansible_facts['hostname'],
+                  'action': 'cutover', 'from': workstation_providers.backup | default('proton/drive'),
+                  'to': migration_new_provider} | to_json }}
+            create: true
+            mode: '0600'
+          when: not ansible_check_mode
+
+        - name: Show cutover summary
+          ansible.builtin.debug:
+            msg:
+              - "CUTOVER DONE: timers switched to {{ migration_new_provider }} (old timer stopped, data untouched)."
+              - "Remember to commit workstation_providers.backup={{ migration_new_provider }} in Git and re-run workstation.yml so the backup monitor follows the new provider."
+              - "Keep the old remote dataset for the rollback window; decommission only after verification (docs/MIGRATE.md stage H)."
+      when: migration_mode == 'cutover'
+
+    - name: Rollback — restore the old provider timer
+      block:
+        - name: Stop and disable the NEW provider timer (data untouched)
+          ansible.builtin.systemd_service:
+            name: "{{ migration_provider_units[migration_new_provider].timer }}"
+            scope: user
+            daemon_reload: true
+            enabled: false
+            state: stopped
+          environment:
+            XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+          when:
+            - not ansible_check_mode
+            - migration_new_provider | length > 0
+
+        - name: Re-enable the ORIGINAL provider timer
+          ansible.builtin.systemd_service:
+            name: "{{ migration_provider_units[workstation_providers.backup | default('proton/drive')].timer }}"
+            scope: user
+            daemon_reload: true
+            enabled: true
+            state: started
+          environment:
+            XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+          when: not ansible_check_mode
+
+        - name: Record the rollback in the local migration journal
+          ansible.builtin.lineinfile:
+            path: "{{ migration_state_dir }}/cutover.jsonl"
+            line: >-
+              {{ {'time': ansible_date_time.iso8601, 'host': ansible_facts['hostname'],
+                  'action': 'rollback', 'to': workstation_providers.backup | default('proton/drive'),
+                  'from': migration_new_provider} | to_json }}
+            create: true
+            mode: '0600'
+          when: not ansible_check_mode
+
+        - name: Show rollback summary
+          ansible.builtin.debug:
+            msg: "ROLLBACK DONE: original provider timer re-enabled; new provider timer stopped. No data was deleted."
+      when: migration_mode == 'rollback'

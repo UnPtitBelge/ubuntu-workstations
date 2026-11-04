@@ -9,3 +9,7 @@ workstation_backup_monitor_randomized_delay: '30m'
 # set_fact so the monitor follows the selected provider without renaming units.
 workstation_backup_monitor_service: workstation-proton-backup.service
 workstation_backup_monitor_timer: workstation-proton-backup.timer
+
+# Warn when the last verified restore drill is older than this (or never ran).
+# An upload success alone never proves restorability.
+workstation_backup_monitor_restore_max_age_hours: 1080

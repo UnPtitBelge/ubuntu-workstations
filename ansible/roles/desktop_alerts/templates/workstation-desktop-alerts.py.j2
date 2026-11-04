@@ -66,6 +66,10 @@ def problems(home: Path, max_age_hours: float, now: float):
 
 
 def notify(title: str, message: str):
+    # Self-test hook: record instead of calling notify-send.
+    if os.environ.get("WORKSTATION_ALERTS_STUB_NOTIFY"):
+        print(f"STUB NOTIFY: {title} | {message.splitlines()[0]}")
+        return True
     try:
         result = subprocess.run(
             ["notify-send", "--app-name=Workstation Maintenance", "--urgency=critical",
@@ -80,7 +84,82 @@ def notify(title: str, message: str):
     return result.returncode == 0
 
 
-def main():
+def self_test():
+    """Exercise failure -> notify, duplicate suppression, post-update failure
+    surfacing and recovery in a temporary home. No real notification is sent
+    (notify is stubbed) and no real report is read."""
+    import tempfile
+    failures = []
+
+    def expect(condition, name):
+        print(("PASS: " if condition else "FAIL: ") + name)
+        if not condition:
+            failures.append(name)
+
+    def write_source(home, relative, overall, detail=None):
+        path = home / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = ["TEST REPORT", "Host: selftest", ""]
+        if detail:
+            lines.append(f"[{detail}] something broke")
+        lines += ["", f"OVERALL: {overall}"]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with tempfile.TemporaryDirectory(prefix="workstation-alerts-selftest-") as tmp:
+        home = Path(tmp)
+        os.environ["WORKSTATION_ALERTS_HOME"] = tmp
+        os.environ["WORKSTATION_ALERTS_STUB_NOTIFY"] = "1"
+        state = home / ".local/state/workstation-desktop-alerts/last-alert.json"
+        try:
+            # 1. All reports healthy -> no alert, exit 0, no state file.
+            for name, relative, expected in [(s[0], s[1], s[2]) for s in SOURCES]:
+                write_source(home, relative, expected)
+            rc = main([])
+            expect(rc == 0, "healthy reports produce no alert (exit 0)")
+            expect(not state.exists(), "no alert state is written when healthy")
+
+            # 2. One unhealthy report -> notification sent, state recorded.
+            bad = SOURCES[0]
+            write_source(home, bad[1], "ATTENTION REQUIRED", detail="FAIL")
+            rc = main([])
+            expect(rc == 0, "unhealthy report still exits 0 (alert delivered)")
+            expect(state.exists(), "sent alert records its fingerprint")
+
+            # 3. Same problem again within repeat-hours -> suppressed.
+            import io
+            from contextlib import redirect_stdout
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                main([])
+            expect("SUPPRESSED" in buf.getvalue(), "duplicate alert within repeat-hours is suppressed")
+
+            # 4. A different failure (post-update validation) -> fresh alert.
+            write_source(home, ".local/state/workstation-post-update/latest.txt", "ATTENTION REQUIRED", detail="FAIL")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                main([])
+            expect("SENT" in buf.getvalue(), "a new failure raises a fresh alert despite suppression")
+
+            # 5. Recovery: all reports healthy again -> state cleared.
+            for name, relative, expected in [(s[0], s[1], s[2]) for s in SOURCES]:
+                write_source(home, relative, expected)
+            write_source(home, ".local/state/workstation-post-update/latest.txt", "HEALTHY")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = main([])
+            expect("HEALTHY" in buf.getvalue() and rc == 0, "recovery is reported as HEALTHY")
+            expect(not state.exists(), "recovery clears the saved fingerprint")
+        finally:
+            os.environ.pop("WORKSTATION_ALERTS_HOME", None)
+            os.environ.pop("WORKSTATION_ALERTS_STUB_NOTIFY", None)
+    if failures:
+        print(f"SELF-TEST FAILED: {len(failures)} scenario(s) failed", file=sys.stderr)
+        return 1
+    print("SELF-TEST PASSED: failure, suppression, fresh-failure and recovery all behave as expected.")
+    return 0
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-report-age-hours", type=float, default=48,
                         help="Default maximum report age; per-source max_age_hours overrides it")
@@ -89,15 +168,19 @@ def main():
     parser.add_argument("--test-notification", action="store_true", help="Send one explicit test notification")
     parser.add_argument("--test-post-update-failure", action="store_true",
                         help="Simulate a post-update failure in dry-run mode only")
-    args = parser.parse_args()
+    parser.add_argument("--self-test", action="store_true",
+                        help="Exercise failure -> notify, duplicate suppression and recovery in a temp home; no real notification is sent")
+    args = parser.parse_args(argv)
     if args.test_post_update_failure and not args.dry_run:
         parser.error("--test-post-update-failure requires --dry-run")
     if args.max_report_age_hours <= 0 or args.repeat_hours <= 0:
         parser.error("age and repeat intervals must be positive")
     if args.test_notification:
         return 0 if notify("Workstation alerts test", "Desktop notifications are working.") else 1
+    if args.self_test:
+        return self_test()
 
-    home = Path.home()
+    home = Path(os.environ.get("WORKSTATION_ALERTS_HOME", str(Path.home())))
     now = time.time()
     issues = problems(home, args.max_report_age_hours, now)
     if args.test_post_update_failure:

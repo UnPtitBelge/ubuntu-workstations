@@ -7,8 +7,10 @@
 # ansible/inventory/group_vars/all.yml so every backup provider sees them.
 
 # Must exist in Proton Drive BEFORE the first manual run; the role never creates
-# cloud folders or deletes anything in Proton Drive.
-workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ ansible_facts['hostname'] }}"
+# cloud folders or deletes anything in Proton Drive. The destination derives
+# from the declared machine identity (workstation_device_name in host_vars),
+# which the playbook asserts to be unique across the inventory.
+workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ workstation_device_name | default(ansible_facts['hostname']) }}"
 
 # Preserves changed files as Proton Drive revisions (subject to plan limits).
 workstation_backup_folder_conflict_strategy: merge
@@ -35,3 +37,9 @@ workstation_proton_drive_platforms:
     directory: linux-arm64
     sha512: >-
       c8d5a6b174e57f06d05cb5483400b9963faf58e743b6b33706bb73ecff718047ffce6b439994255b94b5b226b90d2e91bef7418ec96c1c3f5d8bf39b6cd01321
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: [install, configure, health, verify, disable]
+workstation_provider_manual_actions: [export, import, cutover]

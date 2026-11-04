@@ -62,7 +62,15 @@ Aim for `failed=0`, `unreachable=0` and `changed=0` on the second stable run. Ch
 
 ### New install prerequisites
 
-For a future machine, first install a supported Ubuntu release and configure disk encryption, user login, networking, Git access, and a usable sudo implementation. Then install Ansible and Git if needed:
+Supported platform (asserted by `playbooks/workstation.yml` before any role runs — variables in `ansible/inventory/group_vars/all.yml`):
+
+| Requirement | Minimum | Variable |
+| --- | --- | --- |
+| Distribution | Ubuntu 26.04 LTS | `workstation_supported_distribution` / `workstation_supported_release` |
+| ansible-core | 2.18.0 | `workstation_min_ansible_core` |
+| Python (controller/target) | 3.12 | `workstation_min_python` |
+
+For a new machine, first install a supported Ubuntu release and configure disk encryption, user login, networking, Git access, and a usable sudo implementation. Then install Ansible and Git if needed:
 
 ```fish
 sudo apt-get update
@@ -72,6 +80,8 @@ mkdir -p ~/Projects
 ```
 
 **Do not paste a sample `git clone` URL as-is.** Keep bootstrap secrets, private keys and personal credentials out of Git.
+
+**Machine identity:** each host declares a unique `workstation_device_name` in `host_vars/<host>.yml`. The playbook asserts it matches the runtime hostname and that no two inventory hosts share one; backup destinations derive from it. `scripts/setup-workstation.py` refuses a hostname already declared by another host.
 
 ## 3. Adding a third machine today (partially manual)
 
@@ -109,7 +119,7 @@ workstation_backup_destination: "<computed/validated per-host destination>"
 
 Do not put plaintext access tokens, password-vault exports, recovery phrases or provider session databases in inventory YAML.
 
-## 4. Target architecture for generic deployments (schema implemented; more adapters planned)
+## 4. Target architecture for generic deployments (schema and adapter contracts implemented; more adapters planned)
 
 ```text
 Profiles (developer_gnome, headless, lightweight ...)
@@ -119,7 +129,9 @@ Profiles (developer_gnome, headless, lightweight ...)
                  └── Normalized monitoring and migration metadata
 ```
 
-The selection is implemented in `ansible/inventory/group_vars/all.yml` (`workstation_capabilities`, `workstation_providers`) and dispatched in `ansible/playbooks/workstation.yml` to roles under `ansible/roles/providers/<vendor>/<name>/` (vendor-namespaced, so the project grows by contribution — see [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider"). Built-in providers today: `proton/drive`, `google/drive`, `syncthing`, `proton/vpn`, `wireguard`, `proton/mail`, `google/mail`, `proton/pass`, `keepassxc`, and the guidance-only `custom` — see [PROVIDERS.md](PROVIDERS.md) for the full table, account/secret requirements, and the self-hosted VPS example. To add your own (self-hosted VPS, another vendor), create `ansible/roles/providers/<vendor>/<name>/` in your clone and set `workstation_providers.<capability>: <vendor>/<name>` — no playbook edit needed. Set a provider to `none` to skip a capability. Scope: Ubuntu 26.04 LTS only.
+The selection is implemented in `ansible/inventory/group_vars/all.yml` (`workstation_capabilities`, `workstation_providers`) and dispatched in `ansible/playbooks/workstation.yml` to roles under `ansible/roles/providers/<vendor>/<name>/` (vendor-namespaced, so the project grows by contribution — see [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider"). Built-in providers today: `proton/drive`, `google/drive`, `syncthing`, `proton/vpn`, `wireguard`, `proton/mail`, `google/mail`, `proton/pass`, `keepassxc`, and the guidance-only `custom` — see [PROVIDERS.md](PROVIDERS.md) for the full table, account/secret requirements, and the self-hosted VPS example. To add your own (self-hosted VPS, another vendor), create `ansible/roles/providers/<vendor>/<name>/` in your clone, declare `workstation_provider_supported_actions` / `workstation_provider_manual_actions` in its defaults and add the "Record provider adapter contract" task (the playbook fails the run if a selected provider does not record its contract), then set `workstation_providers.<capability>: <vendor>/<name>` — no playbook edit needed. Set a provider to `none` to skip a capability. Scope: Ubuntu 26.04 LTS only.
+
+Two more playbooks support operations without touching the main run: `playbooks/provider-preflight.yml` (read-only per-capability migration inventory via `scripts/preflight-collect.py`, reports in `~/.local/state/workstation-migration/`) and `playbooks/migrate-backup.yml` (observe / prepare / cutover / rollback for backup-provider switches — see [MIGRATE.md](MIGRATE.md) §3).
 
 ### Capability contracts
 
@@ -180,6 +192,9 @@ Adding a tool to the managed set is configuration-only — no playbook or script
 | Tool data to back up | `workstation_backup_sources` | `ansible/inventory/group_vars/all.yml` (or `host_vars/`; provider defaults in e.g. `ansible/roles/providers/proton/drive/defaults/main.yml`) |
 | Tool caches excluded from backups | `workstation_backup_excludes` | same |
 | Backup dataset label | `workstation_backup_dataset_id` | same |
+| Per-file SHA-256 manifest per run | `workstation_backup_manifest_enabled` | `ansible/inventory/group_vars/all.yml` |
+| Monthly restore drill schedule | `workstation_backup_restore_test_calendar` / `_randomized_delay` | same |
+| Restore-freshness alert limit | `workstation_backup_monitor_restore_max_age_hours` | `ansible/roles/backup_monitor/defaults/main.yml` |
 | Health-checked units | `workstation_health_system_services`, `workstation_health_user_services`, `workstation_health_system_timers` | `ansible/roles/health/defaults/main.yml` |
 | Drift-monitored config files | `workstation_drift_targets` | `ansible/roles/drift/defaults/main.yml` |
 | Reports consolidated weekly and alerted on | `workstation_report_sources` (optional per-source `max_age_hours`) | `ansible/inventory/group_vars/all.yml` |
@@ -192,7 +207,8 @@ Behavior notes:
 
 - mise, uv and rustup tools are discovered automatically by `workstation-tool-update-check` (uv via `uv tool list --outdated`); only APT-packaged tools need the `workstation_tool_updates_packages` entry.
 - Tool binaries under `~/.local`, `~/.cargo`, `~/.rustup` and `~/.local/share/mise` are intentionally **not** backed up — they are reproducible from this repository. Back up only tool *data*.
-- Each successful backup writes a normalized record to `~/.local/state/workstation-backup/status.json` (schema in [MIGRATE.md](MIGRATE.md) §5: `schema_version`, `capability`, `provider`, `host`, `dataset_id`, `checked_at`, `result`, `verified_restore_at`). `workstation-backup-health-check` consumes that record and falls back to the legacy `last-success` stamp for older deployments, so a future backup provider can be monitored without changing the monitor. The systemd unit names remain Proton-specific until a reviewed migration renames them.
+- Each successful backup writes a normalized record to `~/.local/state/workstation-backup/status.json` (schema in [MIGRATE.md](MIGRATE.md) §5: `schema_version`, `capability`, `provider`, `host`, `dataset_id`, `checked_at`, `result`, `verified_restore_at`, plus `files`/`bytes` from the manifest) and appends it to `history.jsonl`, so side-by-side providers keep independent success records. `workstation-backup-health-check` consumes the record, warns on a stale/missing restore verification, and falls back to the legacy `last-success` stamp for older deployments. Unit names stay provider-specific by design (`workstation-proton-backup.*` vs `workstation-rclone-backup.*`).
+- Each real backup run also builds and uploads a dataset manifest (`manifest.json` next to the dataset; local copy `~/.local/state/workstation-backup/manifest-latest.json`) with per-file SHA-256 — see [MIGRATE.md](MIGRATE.md) §5. A monthly restore drill (`workstation-*-backup-restore-test.timer`) downloads one random small remote file to a separate temp dir and compares hashes; results go to `restore-tests.jsonl` and `verified_restore_at`.
 - New APT groups in `workstation_post_update_groups` get a generic "package still installed" check after upgrades; `docker` and `proton` keep their deeper service checks.
 
 ## 8. Profiles — multiple setups from one repository (implemented)

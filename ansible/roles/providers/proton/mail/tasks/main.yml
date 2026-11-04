@@ -1,10 +1,25 @@
 ---
-- name: Validate architecture for Proton Mail
+- name: Fail on unsupported architecture when strict amd64 is required
   ansible.builtin.assert:
     that:
       - ansible_facts['architecture'] == 'x86_64'
-    fail_msg: 'The pinned Proton Mail DEB requires amd64 (x86_64).'
-  when: workstation_proton_mail_enabled | default(true) | bool
+    fail_msg: 'The pinned Proton Mail DEB requires amd64 (x86_64) and workstation_proton_desktop_apps_require_amd64 is true.'
+  when:
+    - workstation_proton_mail_enabled | default(true) | bool
+    - ansible_facts['architecture'] != 'x86_64'
+    - workstation_proton_desktop_apps_require_amd64 | default(false) | bool
+
+- name: Skip Proton Mail gracefully on non-amd64 architectures
+  ansible.builtin.debug:
+    msg: >-
+      The pinned Proton Mail DEB is amd64-only; skipping installation on
+      {{ ansible_facts['architecture'] }} instead of failing the whole run.
+      Select another mail provider (e.g. google/mail) for this host, or set
+      workstation_proton_desktop_apps_require_amd64: true to fail instead.
+  when:
+    - workstation_proton_mail_enabled | default(true) | bool
+    - ansible_facts['architecture'] != 'x86_64'
+    - not (workstation_proton_desktop_apps_require_amd64 | default(false) | bool)
 
 - name: Explain Proton Mail check mode
   ansible.builtin.debug:
@@ -25,4 +40,30 @@
       filename: proton-mail_1.14.0_amd64.deb
   when:
     - workstation_proton_mail_enabled | default(true) | bool
+    - ansible_facts['architecture'] == 'x86_64'
     - not ansible_check_mode
+
+# Adapter contract (docs/MIGRATE.md section 5): record which actions this
+# provider implements vs. which remain manual, so the playbook can verify the
+# record and tools like provider-preflight can consume it.
+- name: Ensure provider contract state directory exists
+  become: false
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider"
+    state: directory
+    mode: '0755'
+  when: not ansible_check_mode
+
+- name: Record provider adapter contract
+  become: false
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider/{{ workstation_provider_path | default(ansible_role_name) | replace('/', '__') }}.json"
+    mode: '0644'
+    content: >-
+      {{ {'schema_version': 1,
+          'capability': workstation_capability | default(''),
+          'provider': workstation_provider_path | default(ansible_role_name),
+          'supported_actions': workstation_provider_supported_actions,
+          'manual_actions': workstation_provider_manual_actions,
+          'recorded_at': ansible_date_time.iso8601 } | to_nice_json }}
+  when: not ansible_check_mode

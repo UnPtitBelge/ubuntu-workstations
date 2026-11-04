@@ -5,6 +5,8 @@ set -euo pipefail
 cli={{ workstation_backup_proton_cli | quote }}
 remote={{ workstation_backup_remote_parent | quote }}
 exclude_file={{ (ansible_facts['env']['HOME'] ~ '/.config/workstation-proton-backup/excludes.txt') | quote }}
+manifest_helper={{ (ansible_facts['env']['HOME'] ~ '/.local/bin/workstation-backup-manifest') | quote }}
+manifest_enabled={{ 'true' if workstation_backup_manifest_enabled | default(true) | bool else 'false' }}
 
 usage() {
   echo 'Usage: workstation-proton-backup [--dry-run|--show-excludes]'
@@ -79,6 +81,7 @@ stage="$(mktemp -d "$cache_home/workstation-proton-backup.XXXXXXXX")"
 chmod 0700 "$stage"
 trap 'rm -rf -- "$stage"' EXIT
 
+# Stage every source first (hardlinks, same filesystem), then upload.
 for source in "${sources[@]}"; do
   source="${source%/}"
   name="$(basename "$source")"
@@ -95,21 +98,62 @@ for source in "${sources[@]}"; do
   rsync -a -m --no-links --link-dest="$source" \
     --exclude-from="$exclude_file" "$source/" "$dest/"
   echo "Selected data (logical size): $(du -sh --apparent-size "$dest" | cut -f1)"
-  echo "Uploading: $name"
-  "$cli" filesystem upload "$dest" "$remote" \
-    --folder-conflict-strategy {{ workstation_backup_folder_conflict_strategy | quote }} \
-    --file-conflict-strategy {{ workstation_backup_file_conflict_strategy | quote }}
-  # Avoid accumulating staged directory trees across multiple sources.
-  rm -rf -- "$dest"
 done
 
+# Dataset manifest with per-file SHA-256 (uploaded alongside the data, and
+# kept locally) so migrations can compare datasets by checksum, not UI totals.
+manifest_local=""
+manifest_files=0
+manifest_bytes=0
+if [[ "$manifest_enabled" == true ]]; then
+  manifest_local="$stage/manifest.json"
+  manifest_sources=()
+  for source in "${sources[@]}"; do
+    manifest_sources+=(--source "${source%/}")
+  done
+  python3 "$manifest_helper" \
+    --dataset-id {{ workstation_backup_dataset_id | quote }} \
+    --host "$(hostname)" \
+    --exclude-file "$exclude_file" \
+    "${manifest_sources[@]}" \
+    --output "$manifest_local"
+  manifest_files="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["file_count"])' "$manifest_local")"
+  manifest_bytes="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["total_bytes"])' "$manifest_local")"
+fi
+
+for source in "${sources[@]}"; do
+  source="${source%/}"
+  name="$(basename "$source")"
+  echo "Uploading: $name"
+  "$cli" filesystem upload "$stage/$name" "$remote" \
+    --folder-conflict-strategy {{ workstation_backup_folder_conflict_strategy | quote }} \
+    --file-conflict-strategy {{ workstation_backup_file_conflict_strategy | quote }}
+done
+if [[ -n "$manifest_local" ]]; then
+  echo "Uploading dataset manifest: manifest.json"
+  "$cli" filesystem upload "$manifest_local" "$remote" \
+    --file-conflict-strategy {{ workstation_backup_file_conflict_strategy | quote }}
+fi
+
 # Normalized success record consumed by the backup monitor; the provider
-# field lets other backup providers write the same schema later.
+# field lets other backup providers write the same schema. verified_restore_at
+# is preserved from the last restore drill — an upload never proves restorability.
 status_dir="${XDG_STATE_HOME:-$HOME/.local/state}/workstation-backup"
 mkdir -p "$status_dir"
-printf '{"schema_version":1,"capability":"backup","provider":"proton_drive","host":"%s","dataset_id":"%s","checked_at":"%s","result":"success","verified_restore_at":null}\n' \
-  "$(hostname)" "{{ workstation_backup_dataset_id }}" "$(date --iso-8601=seconds)" \
+verified_restore_at="null"
+if [[ -f "$status_dir/status.json" ]]; then
+  verified_restore_at="$(jq -r '.verified_restore_at // "null"' "$status_dir/status.json" 2>/dev/null || echo null)"
+fi
+now="$(date --iso-8601=seconds)"
+printf '{"schema_version":1,"capability":"backup","provider":"proton/drive","host":"%s","dataset_id":"%s","checked_at":"%s","result":"success","verified_restore_at":%s,"files":%s,"bytes":%s}\n' \
+  "$(hostname)" {{ workstation_backup_dataset_id | quote }} "$now" "$verified_restore_at" "$manifest_files" "$manifest_bytes" \
   > "$status_dir/status.json.tmp"
 mv "$status_dir/status.json.tmp" "$status_dir/status.json"
+# Append-only history so side-by-side providers keep independent success records.
+jq -c '. + {"unit": "workstation-proton-backup.service"}' "$status_dir/status.json" >> "$status_dir/history.jsonl"
+cp -f "$status_dir/status.json" "$status_dir/last-run.json" 2>/dev/null || true
+if [[ -n "$manifest_local" ]]; then
+  cp -f "$manifest_local" "$status_dir/manifest-latest.json"
+fi
 
-echo "Completed filtered Proton Drive backup: $(date --iso-8601=seconds)"
+echo "Completed filtered Proton Drive backup: $now"

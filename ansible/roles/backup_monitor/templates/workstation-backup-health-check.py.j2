@@ -12,6 +12,7 @@ import time
 
 BACKUP_SERVICE = {{ workstation_backup_monitor_service | to_json }}
 BACKUP_TIMER = {{ workstation_backup_monitor_timer | to_json }}
+RESTORE_MAX_AGE_HOURS = {{ workstation_backup_monitor_restore_max_age_hours | default(1080) | float }}
 STAMP = Path.home() / ".local/state/workstation-backup-monitor/last-success"
 STATUS_RECORD = Path.home() / ".local/state/workstation-backup/status.json"
 REPORT = Path.home() / ".local/state/workstation-backup-monitor/latest.txt"
@@ -90,6 +91,23 @@ def main():
     else:
         check("Last successful backup", False,
               "no recorded successful run since monitoring was installed")
+
+    # Restore drills: an upload alone never proves restorability. The monthly
+    # restore-test timer records verified_restore_at in the status record.
+    restore_age_hours = None
+    if record is not None and record.get("verified_restore_at"):
+        try:
+            restore_age_hours = (time.time() - datetime.fromisoformat(record["verified_restore_at"]).timestamp()) / 3600
+        except (ValueError, TypeError):
+            restore_age_hours = None
+    check("Last verified restore",
+          restore_age_hours is not None and 0 <= restore_age_hours <= RESTORE_MAX_AGE_HOURS,
+          (f"{restore_age_hours:.1f} hours ago (limit: {RESTORE_MAX_AGE_HOURS:.0f}h)"
+           if restore_age_hours is not None else "no restore drill has succeeded yet"))
+
+    if record is not None and record.get("files") is not None:
+        lines.append(f"[INFO] Last backup dataset: {record.get('files')} files, {record.get('bytes')} bytes "
+                     f"(manifest: ~/.local/state/workstation-backup/manifest-latest.json)")
 
     lines.extend(["", "OVERALL: ATTENTION REQUIRED" if issues else "OVERALL: HEALTHY"])
     text = "\n".join(lines) + "\n"

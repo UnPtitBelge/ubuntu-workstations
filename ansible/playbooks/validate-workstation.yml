@@ -119,6 +119,39 @@
       failed_when: false
       check_mode: false
 
+    - name: Inspect desktop alert timer enablement
+      ansible.builtin.command:
+        argv: [systemctl, --user, is-enabled, workstation-desktop-alerts.timer]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_alerts_timer
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect post-update validation timer enablement
+      ansible.builtin.command:
+        argv: [systemctl, --user, is-enabled, workstation-post-update-validation.timer]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_puv_timer
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Inspect post-update validation path watcher enablement
+      ansible.builtin.command:
+        argv: [systemctl, --user, is-enabled, workstation-post-update-validation.path]
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audit_user_bus }}"
+      register: audit_puv_path
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
     - name: Inspect GNOME appearance
       ansible.builtin.command:
         argv: [gsettings, get, org.gnome.desktop.interface, "{{ item }}"]
@@ -195,6 +228,8 @@
           - "Optional commands missing: {{ audit_missing_optional | join(', ') if audit_missing_optional else 'none' }}"
           - "Docker daemon: {{ audit_docker.stdout | default('unavailable', true) }}"
           - "Syncthing user service: {{ audit_syncthing.stdout | default('unavailable', true) }} ({{ audit_syncthing_enabled.stdout | default('unknown', true) }})"
+          - "Desktop alert timer: {{ audit_alerts_timer.stdout | default('unavailable', true) }}"
+          - "Post-update validation timer/path: {{ audit_puv_timer.stdout | default('unavailable', true) }} / {{ audit_puv_path.stdout | default('unavailable', true) }}"
           - "GTK theme: {{ audit_gnome_gtk }} | Icons: {{ audit_gnome_icons }} | Color scheme: {{ audit_gnome_scheme }}"
           - "Resource Monitor enabled: {{ audit_extension_present }}"
           - "GNOME shortcut paths: {{ audit_shortcuts.stdout | default('unavailable', true) }}"
@@ -211,6 +246,9 @@
           - audit_docker.stdout == 'active'
           - audit_syncthing.stdout == 'active'
           - audit_syncthing_enabled.stdout == 'enabled'
+          - audit_alerts_timer.stdout == 'enabled'
+          - audit_puv_timer.stdout == 'enabled'
+          - audit_puv_path.stdout == 'enabled'
           - audit_sync_dir.stat.isdir | default(false)
           - audit_gnome_gtk == "'" ~ audit_expected_gtk_theme ~ "'"
           - audit_gnome_icons == "'" ~ audit_expected_icon_theme ~ "'"

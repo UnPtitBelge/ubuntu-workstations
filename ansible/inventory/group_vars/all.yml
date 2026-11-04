@@ -98,9 +98,20 @@ workstation_health_user_services: "{{ _profile_data.workstation_health_user_serv
 # 'none' (with the capability enabled) to skip it, or drop your own role into
 # ansible/roles/providers/<vendor>/<name>/ and select <vendor>/<name>.
 
+# Supported platform and minimum tool versions (asserted by
+# playbooks/workstation.yml before any role runs; see docs/DEPLOY.md section 2).
+workstation_supported_distribution: Ubuntu
+workstation_supported_release: '26.04'
+workstation_min_ansible_core: '2.18.0'
+workstation_min_python: '3.12'
+
 # Capability-level backup settings shared by every backup provider
-# (providers/proton_drive, providers/rclone_gdrive, ...). Provider-specific
+# (providers/proton/drive, providers/google/drive, ...). Provider-specific
 # settings (remote destination, CLI) stay in the provider role's defaults.
+
+# Each backup run writes (and uploads) a manifest with per-file SHA-256
+# checksums, so migrations can compare datasets without trusting UI totals.
+workstation_backup_manifest_enabled: true
 
 # Complete folders are uploaded, preserving their folder names at destination.
 workstation_backup_sources:
@@ -115,6 +126,16 @@ workstation_backup_dataset_id: home-selected
 # Cron-like systemd schedule for the backup timer.
 workstation_backup_on_calendar: '*-*-* 20:00:00'
 workstation_backup_randomized_delay: '30m'
+
+# Monthly restore drill: a scheduled, read-only-on-the-remote test that
+# downloads one backed-up file to a separate temporary location and compares
+# its SHA-256 with the local source. The result is recorded in
+# ~/.local/state/workstation-backup/status.json (verified_restore_at) and
+# restore-tests.jsonl. The backup monitor warns when the last verified
+# restore is older than workstation_backup_monitor_restore_max_age_hours.
+workstation_backup_restore_test_calendar: monthly
+workstation_backup_restore_test_randomized_delay: 2h
+workstation_backup_monitor_restore_max_age_hours: 1080
 
 # Ignore patterns use rsync/rclone filter syntax. Directory rules ending in /
 # match anywhere below each source. Intentionally do NOT exclude .git/ by

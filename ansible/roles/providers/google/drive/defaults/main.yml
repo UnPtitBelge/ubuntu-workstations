@@ -13,5 +13,13 @@
 # It is never committed and never inside the backup sources.
 
 workstation_rclone_remote: gdrive
-workstation_rclone_remote_parent: "Workstation-Backups/{{ ansible_facts['hostname'] }}"
+# Derives from the declared machine identity (workstation_device_name), which
+# the playbook asserts to be unique across the inventory.
+workstation_rclone_remote_parent: "Workstation-Backups/{{ workstation_device_name | default(ansible_facts['hostname']) }}"
 workstation_rclone_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/rclone"
+
+# Adapter contract (docs/MIGRATE.md section 5): actions this provider
+# implements vs. actions that remain manual. Recorded during provisioning at
+# ~/.local/state/workstation-provider/<provider>.json and verified by the playbook.
+workstation_provider_supported_actions: [install, configure, health, verify, disable]
+workstation_provider_manual_actions: [export, import, cutover]

@@ -91,9 +91,11 @@ Check whether the service actually succeeded and verify remote files. An unatten
 
 To enable the timer **after a successful backup and restore**, set `workstation_backup_timer_enabled: true` in the appropriate inventory variables and rerun provisioning. Verify the resulting timer and a real scheduled run.
 
+**Automated restore drills:** every backup provider deploys a monthly `workstation-*-backup-restore-test.timer` that downloads one random small backed-up file to a separate temp directory and compares its SHA-256 with the local source (read-only on the remote — it never overwrites or deletes anything). Results are dated in `~/.local/state/workstation-backup/restore-tests.jsonl` and summarized in `status.json` (`verified_restore_at`) and the backup monitor report (`Last verified restore`). Manual drill: `~/.local/bin/workstation-proton-backup-restore-test` (or `workstation-rclone-backup-restore-test`). Every backup run also uploads a per-file SHA-256 `manifest.json` next to the dataset (local copy: `manifest-latest.json`) — compare counts/checksums with it instead of trusting remote UI totals.
+
 ## D. Ongoing recovery exercises
 
-- Monthly: restore a randomly selected document to a temporary directory, verify it opens, and inspect the backup logs.
+- Monthly: the automated restore drill covers one random file; the backup monitor alerts if `verified_restore_at` is older than `workstation_backup_monitor_restore_max_age_hours`. Quarterly, additionally restore a chosen file manually to a temporary directory, verify it opens, and inspect the backup logs.
 - After significant role changes: rerun `validate-workstation.yml` and test second-run idempotency.
 - After major OS upgrades: test a new disposable VM rehearsal before changing the laptop.
 - Before deleting obsolete cloud backups: ensure you have verified replacement copies. Exclusion rules prevent *future* uploads; they do not reclaim old Proton Drive storage automatically.

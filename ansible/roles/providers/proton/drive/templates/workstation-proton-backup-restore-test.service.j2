@@ -1,0 +1,6 @@
+[Unit]
+Description=Monthly restore drill for the Proton Drive workstation backup (read-only on the remote)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-proton-backup-restore-test

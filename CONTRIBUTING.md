@@ -75,17 +75,25 @@ Rules for a new provider:
    Set your provider in `workstation_providers.<capability>: <vendor>/<name>`
    (tests can use `-e`). Directories starting with `_` are helpers
    (e.g. `proton/_deb`) and are excluded from the provider list.
-2. **Contract** (details in [MIGRATE.md](docs/MIGRATE.md) §5): implement
-   `install` / `configure` / `health`. Implement `export` / `import` / `verify`
-   only where the backend supports them — otherwise state *manual* explicitly
-   in a debug message and in `docs/PROVIDERS.md`. Never claim an unsupported
-   operation succeeded.
+2. **Contract** (details in [MIGRATE.md](docs/MIGRATE.md) §5): declare in
+   `defaults/main.yml` and record in `tasks/main.yml` (the playbook fails the
+   run if a selected provider does not record it):
+   `workstation_provider_supported_actions` / `workstation_provider_manual_actions`,
+   written to `~/.local/state/workstation-provider/<provider>.json` by the
+   "Record provider adapter contract" task (copy it from a built-in role;
+   `workstation_capability` and `workstation_provider_path` are passed in).
+   Implement `install` / `configure` / `health`. Implement `export` / `import` /
+   `verify` only where the backend supports them — otherwise list them as
+   *manual*. Never claim an unsupported operation succeeded.
 3. **Health output:** write `~/.local/state/workstation-<capability>/latest.txt`
    with exactly one `OVERALL:` line and register it in `workstation_report_sources`
    so the weekly report and GNOME alerts pick it up. Backup providers must
-   additionally write `~/.local/state/workstation-backup/status.json`
-   (schema in MIGRATE.md §5) and set the `workstation_backup_monitor_service` /
-   `workstation_backup_monitor_timer` facts to their own unit names.
+   additionally write `~/.local/state/workstation-backup/status.json` + append
+   to `history.jsonl`, upload a per-file SHA-256 `manifest.json`, deploy a
+   monthly restore-drill script/timer (copy `proton/drive`), and set the
+   `workstation_backup_monitor_service` / `workstation_backup_monitor_timer`
+   facts to their own unit names. Extend `scripts/preflight-collect.py` with a
+   read-only section for your provider (never print secrets; truncate device IDs).
 4. **Secrets stay local:** tokens, keys, vault files go in `~/.config`, the
    keyring, or mode-0600 files — never in Git, never in backup sources. Pin
    downloaded artifacts with checksums (see the `proton/_deb` role).

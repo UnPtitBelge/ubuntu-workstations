@@ -55,10 +55,13 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 │   │       ├── desktop.yml
 │   │       ├── laptop.yml
 │   │       └── *.yml.example        # inert per-host templates
+│   ├── files/                       # shared helpers deployed by roles (e.g. workstation-backup-manifest)
 │   ├── playbooks/
-│   │   ├── workstation.yml          # Main provisioning (validates profile + providers, dispatches provider roles)
+│   │   ├── workstation.yml          # Main provisioning (validates platform/identity/profile/providers, dispatches provider roles)
 │   │   ├── validate-workstation.yml # Strict workstation validation
-│   │   └── rehearsal-headless.yml   # Optional disposable-VM test
+│   │   ├── rehearsal-headless.yml   # Optional disposable-VM test
+│   │   ├── provider-preflight.yml   # Read-only per-capability migration inventory
+│   │   └── migrate-backup.yml       # Backup-provider observe/prepare/cutover/rollback helper
 │   └── roles/
 │       ├── providers/               # capability providers, vendor-namespaced
 │       │   ├── proton/              #   _deb, drive (backup), vpn, pass, mail
@@ -100,7 +103,7 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 │   ├── PUBLIC-RELEASE-AUDIT.md      # Security/privacy/portability audit behind the public release
 │   ├── REPOSITORY-AUDIT.md
 │   └── release checklists + compatibility notes
-└── scripts/                         # repository utilities (read-only audit, bootstrap, onboarding, maintenance gate)
+└── scripts/                         # repository utilities (audit, bootstrap, onboarding, preflight collector, maintenance gate)
 ```
 
 The tree above describes the v1.3.0 layout; optional assets and documentation may vary. Shared defaults belong in role defaults and `inventory/group_vars/all.yml`; host-specific settings belong in `inventory/host_vars/`. Don't copy device IDs, application sessions or credentials between machines.
@@ -119,6 +122,8 @@ The configuration is **tested on two named Ubuntu workstations** and is not yet 
 Run Ansible **locally on the workstation being configured**, preferably from its logged-in GNOME session. All commands below are **Fish-compatible**.
 
 ### 1. Bootstrap a fresh Ubuntu installation
+
+Supported platform, asserted by the playbook before anything runs: **Ubuntu 26.04 LTS, ansible-core ≥ 2.18.0, Python ≥ 3.12** (variables `workstation_supported_*` / `workstation_min_*` in `ansible/inventory/group_vars/all.yml` — see [DEPLOY.md](docs/DEPLOY.md) §2).
 
 ```fish
 sudo apt-get update
@@ -220,7 +225,7 @@ Normal upkeep should require **no daily manual interaction** when the machine is
 | Ubuntu updates | Daily unattended eligible security upgrades | Third-party Docker/Proton upgrades and automatic reboots are excluded |
 | Health | Daily checks of Docker, Syncthing, disk, update timers and reboot requirement | Detects problems; doesn't repair them |
 | Drift | Daily comparison of selected managed files against a deployed baseline | Not a full Git-to-system or whole-machine audit; provisioning can refresh the baseline |
-| Backup | Scheduled Proton Drive upload, plus backup freshness/failure monitoring | Requires machine-local authentication; periodically test restores |
+| Backup | Scheduled cloud upload (Proton Drive by default), per-file SHA-256 manifest, monthly automated restore drill, freshness/failure monitoring | Requires machine-local authentication; the drill proves restorability, an upload alone does not |
 | Weekly report | Consolidates health, drift and backup-monitor results | Stale and missing reports require investigation |
 | Alerts | GNOME notification on detected failures with suppression | Graphical notifications require an active session |
 
@@ -295,7 +300,7 @@ journalctl --user -u workstation-proton-backup.service -n 50 --no-pager
 proton-drive filesystem list /my-files
 ```
 
-**Recovery assurance:** Periodically restore a real file from Proton Drive into a *separate* location and compare it with the source. A healthy timer or success timestamp is not a substitute for a restore test. Starting `workstation-proton-backup.service` triggers a real upload; do so intentionally.
+**Recovery assurance:** a monthly restore drill (`workstation-proton-backup-restore-test.timer`; `workstation-rclone-backup-restore-test.timer` for the rclone provider) downloads one random small backed-up file into a *separate* temp location and compares its SHA-256 with the source — results are dated in `~/.local/state/workstation-backup/restore-tests.jsonl` and `status.json` (`verified_restore_at`), and the backup monitor warns when the last verified restore is stale. Every run also uploads a per-file SHA-256 `manifest.json` next to the dataset (local copy `manifest-latest.json`). A healthy timer or success timestamp is not a substitute for a restore test. Run a drill manually with `~/.local/bin/workstation-proton-backup-restore-test`. Starting `workstation-proton-backup.service` triggers a real upload; do so intentionally.
 
 ## Tests, recovery and safe operations
 

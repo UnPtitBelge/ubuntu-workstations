@@ -152,6 +152,50 @@
   register: backup_timer_result
   when: workstation_backup_enabled | bool
 
+- name: Install shared backup manifest helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../files/workstation-backup-manifest.py"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-backup-manifest"
+    mode: '0755'
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive restore-test script (monthly drill)
+  ansible.builtin.template:
+    src: workstation-proton-backup-restore-test.sh.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-proton-backup-restore-test"
+    mode: '0700'
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive restore-test user service
+  ansible.builtin.template:
+    src: workstation-proton-backup-restore-test.service.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup-restore-test.service"
+    mode: '0644'
+  when: workstation_backup_enabled | bool
+
+- name: Install Proton Drive restore-test user timer
+  ansible.builtin.template:
+    src: workstation-proton-backup-restore-test.timer.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup-restore-test.timer"
+    mode: '0644'
+  when: workstation_backup_enabled | bool
+
+- name: Enable monthly Proton Drive restore drill
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-proton-backup-restore-test.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - workstation_backup_enabled | bool
+    - workstation_backup_timer_enabled | bool
+    - not ansible_check_mode
+
 - name: Manage Proton Drive backup timer (disabled until restore-tested)
   ansible.builtin.systemd_service:
     name: workstation-proton-backup.timer
@@ -178,3 +222,28 @@
     - workstation_backup_cleanup_legacy_restic | bool
     - old_restic_timer.stat.exists | default(false)
     - not ansible_check_mode
+
+# Adapter contract (docs/MIGRATE.md section 5): record which actions this
+# provider implements vs. which remain manual, so the playbook can verify the
+# record and tools like provider-preflight can consume it.
+- name: Ensure provider contract state directory exists
+  become: false
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider"
+    state: directory
+    mode: '0755'
+  when: not ansible_check_mode
+
+- name: Record provider adapter contract
+  become: false
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-provider/{{ workstation_provider_path | default(ansible_role_name) | replace('/', '__') }}.json"
+    mode: '0644'
+    content: >-
+      {{ {'schema_version': 1,
+          'capability': workstation_capability | default(''),
+          'provider': workstation_provider_path | default(ansible_role_name),
+          'supported_actions': workstation_provider_supported_actions,
+          'manual_actions': workstation_provider_manual_actions,
+          'recorded_at': ansible_date_time.iso8601 } | to_nice_json }}
+  when: not ansible_check_mode

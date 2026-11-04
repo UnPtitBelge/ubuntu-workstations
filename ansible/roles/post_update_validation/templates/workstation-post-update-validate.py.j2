@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Read-only post-APT-update checks for monitored package groups."""
+"""Read-only post-APT-update checks for monitored package groups.
+
+--self-test exercises the failure / success / change-detection machinery in a
+temporary state directory without touching the real one (used by the routine
+checklist to prove failures surface reliably).
+"""
 import argparse
 import datetime as dt
 import json
 import os
 from pathlib import Path
-import shutil
 import socket
 import subprocess
 import sys
@@ -16,9 +20,21 @@ GROUPS = {
 {% endfor %}
 }
 GROUP_NAMES = [{% for name in workstation_post_update_groups %}{{ name | to_json }}, {% endfor %}]
-STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "workstation-post-update"
-VERSIONS_FILE = STATE_DIR / "versions.json"
-REPORT_FILE = STATE_DIR / "latest.txt"
+
+
+def state_dir():
+    override = os.environ.get("WORKSTATION_PUV_STATE_DIR")
+    if override:
+        return Path(override)
+    return Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "workstation-post-update"
+
+
+def versions_file():
+    return state_dir() / "versions.json"
+
+
+def report_file():
+    return state_dir() / "latest.txt"
 
 
 def run(*args, timeout=25):
@@ -40,13 +56,20 @@ def versions():
 
 
 def save_versions(data):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    temp = VERSIONS_FILE.with_suffix(".json.tmp")
+    d = state_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    temp = versions_file().with_suffix(".json.tmp")
     temp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-    temp.replace(VERSIONS_FILE)
+    temp.replace(versions_file())
 
 
 def checks(changed_groups):
+    # Self-test hook: inject deterministic results without touching the system.
+    stub = os.environ.get("WORKSTATION_PUV_STUB_RESULTS")
+    if stub == "fail":
+        return [(False, "Self-test stub failure", "injected by WORKSTATION_PUV_STUB_RESULTS=fail")]
+    if stub == "ok":
+        return [(True, "Self-test stub success", "injected by WORKSTATION_PUV_STUB_RESULTS=ok")]
     results = []
     def record(ok, desc, detail):
         results.append((ok, desc, detail))
@@ -76,13 +99,18 @@ def checks(changed_groups):
     return results
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--baseline", action="store_true", help="Save currently installed package versions as the reference (no validation)")
     mode.add_argument("--watch", action="store_true", help="Validate if monitored APT package versions changed since the last successful check")
     mode.add_argument("--check", choices=GROUP_NAMES + ["all"], help="Force read-only validation now")
-    args = parser.parse_args()
+    mode.add_argument("--self-test", action="store_true", help="Exercise failure/success/change-detection machinery in a temp state dir; touches nothing real")
+    args = parser.parse_args(argv)
+
+    if args.self_test:
+        return self_test()
+
     current = versions()
 
     if args.baseline:
@@ -91,11 +119,11 @@ def main():
         return 0
 
     if args.watch:
-        if not VERSIONS_FILE.exists():
+        if not versions_file().exists():
             print("No baseline yet; run --baseline after installation. No result marked healthy.")
             return 2
         try:
-            old = json.loads(VERSIONS_FILE.read_text())
+            old = json.loads(versions_file().read_text())
         except (OSError, ValueError) as exc:
             print(f"Invalid baseline: {exc}", file=sys.stderr)
             return 2
@@ -119,14 +147,67 @@ def main():
         lines.append(f"[{'OK' if ok else 'FAIL'}] {title}: {detail}")
     good = all(row[0] for row in results)
     lines += ["", "OVERALL: " + ("HEALTHY" if good else "ATTENTION REQUIRED")]
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    REPORT_FILE.write_text("\n".join(lines) + "\n")
+    state_dir().mkdir(parents=True, exist_ok=True)
+    report_file().write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     # Keep old baseline after a failure: the next unrelated APT transaction can re-check.
     # A successful manual check records current versions too, so subsequent watch checks are meaningful.
     if good:
         save_versions(current)
     return 0 if good else 1
+
+
+def self_test():
+    """Run in a temp state dir: failure surfaces (exit 1, ATTENTION REQUIRED,
+    baseline untouched), success records the baseline, watch mode detects a
+    simulated package change."""
+    import tempfile
+    failures = []
+
+    def expect(condition, name):
+        print(("PASS: " if condition else "FAIL: ") + name)
+        if not condition:
+            failures.append(name)
+
+    with tempfile.TemporaryDirectory(prefix="workstation-puv-selftest-") as tmp:
+        os.environ["WORKSTATION_PUV_STATE_DIR"] = tmp
+        try:
+            os.environ["WORKSTATION_PUV_STUB_RESULTS"] = "fail"
+            rc = main(["--check", "all"])
+            report = report_file().read_text()
+            expect(rc == 1, "failing check exits 1")
+            expect("OVERALL: ATTENTION REQUIRED" in report, "failing check reports ATTENTION REQUIRED")
+            expect("[FAIL] Self-test stub failure" in report, "failing check detail is in the report")
+            expect(not versions_file().exists(), "failed validation does not update the baseline")
+
+            os.environ["WORKSTATION_PUV_STUB_RESULTS"] = "ok"
+            rc = main(["--check", "all"])
+            report = report_file().read_text()
+            expect(rc == 0, "successful check exits 0")
+            expect("OVERALL: HEALTHY" in report, "successful check reports HEALTHY")
+            expect(versions_file().exists(), "successful check records the baseline")
+
+            # Simulate an APT upgrade of one monitored package, then watch.
+            saved = json.loads(versions_file().read_text())
+            group = next(iter(GROUPS))
+            pkg = next(iter(GROUPS[group]))
+            saved[group][pkg] = "0.0.0-selftest"
+            versions_file().write_text(json.dumps(saved))
+            rc = main(["--watch"])
+            report = report_file().read_text()
+            expect(rc == 0, "watch mode validates after a detected change")
+            expect("[CHANGE]" in report, "watch mode lists the changed package")
+
+            rc = main(["--watch"])
+            expect(rc == 0, "watch mode is a no-op when nothing changed since the last success")
+        finally:
+            os.environ.pop("WORKSTATION_PUV_STUB_RESULTS", None)
+            os.environ.pop("WORKSTATION_PUV_STATE_DIR", None)
+    if failures:
+        print(f"SELF-TEST FAILED: {len(failures)} scenario(s) failed", file=sys.stderr)
+        return 1
+    print("SELF-TEST PASSED: failure, success, change detection and baseline handling all behave as expected.")
+    return 0
 
 
 if __name__ == "__main__":

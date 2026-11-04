@@ -1,0 +1,51 @@
+---
+# Read-only provider-migration preflight inventory (docs/MIGRATE.md stage A).
+# Collects per-capability data locations, volumes, unit state and auth
+# *presence* without ever printing secrets. Safe to run any time:
+#   ansible-playbook playbooks/provider-preflight.yml --limit desktop
+# In check mode the report is printed but not written to disk.
+- name: Provider migration preflight inventory
+  hosts: workstations
+  gather_facts: true
+  become: false
+
+  vars:
+    preflight_state_dir: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-migration"
+    preflight_report: >-
+      {{ preflight_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}
+      _{{ ansible_date_time.time | regex_replace(':', '') }}.txt
+    preflight_backup_remote_parent: >-
+      {{ workstation_backup_remote_parent | default('') or workstation_rclone_remote_parent | default('') }}
+
+  tasks:
+    - name: Run the read-only preflight collector
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/../../scripts/preflight-collect.py"
+          - --home
+          - "{{ ansible_facts['env']['HOME'] }}"
+          - --providers
+          - "{{ workstation_providers | to_json }}"
+          - --backup-sources
+          - "{{ workstation_backup_sources | default([]) | to_json }}"
+          - --remote-parent
+          - "{{ preflight_backup_remote_parent }}"
+          - --dataset-id
+          - "{{ workstation_backup_dataset_id | default('') }}"
+          - --keepassxc-vault
+          - "{{ workstation_keepassxc_vault | default('') }}"
+          - --output
+          - "{{ preflight_report if not ansible_check_mode else '' }}"
+      register: preflight_result
+      changed_when: false
+      check_mode: false
+
+    - name: Show the preflight report
+      ansible.builtin.debug:
+        var: preflight_result.stdout_lines
+
+    - name: Note where the report was saved
+      ansible.builtin.debug:
+        msg: "Report saved to {{ preflight_report }} (mode 0600, local only — review before sharing; it contains paths and counts, never secrets)"
+      when: not ansible_check_mode

@@ -7,6 +7,49 @@
     providers_root: "{{ (playbook_dir ~ '/../roles/providers') | realpath }}"
 
   pre_tasks:
+    - name: Assert supported platform and minimum tool versions
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == workstation_supported_distribution
+          - ansible_facts['distribution_version'] == workstation_supported_release
+          - ansible_version.full is version(workstation_min_ansible_core, '>=')
+          - ansible_python_version is version(workstation_min_python, '>=')
+        fail_msg: >-
+          Unsupported platform: this repository targets
+          {{ workstation_supported_distribution }} {{ workstation_supported_release }},
+          ansible-core >= {{ workstation_min_ansible_core }},
+          Python >= {{ workstation_min_python }}.
+          Found: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
+          ansible-core {{ ansible_version.full }}, Python {{ ansible_python_version }}.
+          See docs/DEPLOY.md section 2 (prerequisites and release compatibility).
+
+    - name: Assert the declared machine identity matches this host
+      ansible.builtin.assert:
+        that:
+          - workstation_device_name | default(ansible_facts['hostname']) == ansible_facts['hostname']
+        fail_msg: >-
+          Declared workstation_device_name '{{ workstation_device_name | default('') }}'
+          does not match the runtime hostname '{{ ansible_facts['hostname'] }}'.
+          Fix the inventory/host_vars entry for this machine; do not clone identities between hosts.
+
+    - name: Gather declared machine identities of all inventory hosts
+      ansible.builtin.set_fact:
+        workstation_inventory_identities: >-
+          {{ workstation_inventory_identities | default([])
+             + [hostvars[item]['workstation_device_name'] | default('<<missing>>')] }}
+      loop: "{{ groups['workstations'] }}"
+
+    - name: Assert unique machine identities across the whole inventory
+      ansible.builtin.assert:
+        that:
+          - workstation_inventory_identities | unique | length == workstation_inventory_identities | length
+          - groups['workstations'] | unique | length == groups['workstations'] | length
+        fail_msg: >-
+          Duplicate machine identity across inventory hosts:
+          {{ workstation_inventory_identities | join(', ') }}.
+          Every host needs a unique workstation_device_name (host_vars/<host>.yml);
+          provisioning must never clone hostname, backup destination or device identity.
+
     - name: Discover available profiles
       ansible.builtin.find:
         paths: "{{ playbook_dir }}/../../profiles"
@@ -66,6 +109,7 @@
         name: "providers/{{ workstation_providers.sync | default('syncthing') }}"
       vars:
         workstation_capability: sync
+        workstation_provider_path: "{{ workstation_providers.sync | default('syncthing') }}"
       when:
         - workstation_capabilities.sync.enabled | default(true) | bool
         - workstation_providers.sync | default('syncthing') != 'none'
@@ -77,6 +121,7 @@
         name: "providers/{{ workstation_providers.vpn | default('proton/vpn') }}"
       vars:
         workstation_capability: vpn
+        workstation_provider_path: "{{ workstation_providers.vpn | default('proton/vpn') }}"
       when:
         - workstation_capabilities.vpn.enabled | default(true) | bool
         - workstation_providers.vpn | default('proton/vpn') != 'none'
@@ -86,6 +131,7 @@
         name: "providers/{{ workstation_providers.backup | default('proton/drive') }}"
       vars:
         workstation_capability: backup
+        workstation_provider_path: "{{ workstation_providers.backup | default('proton/drive') }}"
       when:
         - workstation_capabilities.backup.enabled | default(true) | bool
         - workstation_providers.backup | default('proton/drive') != 'none'
@@ -97,6 +143,7 @@
         name: "providers/{{ workstation_providers.passwords | default('proton/pass') }}"
       vars:
         workstation_capability: passwords
+        workstation_provider_path: "{{ workstation_providers.passwords | default('proton/pass') }}"
       when:
         - workstation_capabilities.passwords.enabled | default(true) | bool
         - workstation_providers.passwords | default('proton/pass') != 'none'
@@ -106,6 +153,7 @@
         name: "providers/{{ workstation_providers.mail | default('proton/mail') }}"
       vars:
         workstation_capability: mail
+        workstation_provider_path: "{{ workstation_providers.mail | default('proton/mail') }}"
       when:
         - workstation_capabilities.mail.enabled | default(true) | bool
         - workstation_providers.mail | default('proton/mail') != 'none'
@@ -148,3 +196,39 @@
     - apt_update_review
     - post_update_validation
     - release_audit
+
+  post_tasks:
+    # Every selected provider role records its adapter contract (supported vs
+    # manual actions) under ~/.local/state/workstation-provider/ during its run
+    # (docs/MIGRATE.md section 5). Verify the records exist and are readable.
+    - name: Collect provider contract records
+      ansible.builtin.stat:
+        path: "{{ lookup('env', 'HOME') }}/.local/state/workstation-provider/{{ workstation_providers[item.key] | replace('/', '__') }}.json"
+      loop: "{{ workstation_capabilities | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: workstation_provider_contract_stats
+      when:
+        - item.value.enabled | default(true) | bool
+        - workstation_providers[item.key] | default('') != 'none'
+      check_mode: false
+
+    - name: Assert every selected provider recorded its adapter contract
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists | default(false)
+          - item.stat.isreg | default(false)
+        fail_msg: >-
+          Provider '{{ workstation_providers[item.item.key] }}' (capability '{{ item.item.key }}')
+          did not record its adapter contract. Add a 'Record provider adapter contract'
+          task writing ~/.local/state/workstation-provider/{{ workstation_providers[item.item.key] | replace('/', '__') }}.json
+          (see docs/MIGRATE.md section 5 and CONTRIBUTING.md).
+      loop: "{{ workstation_provider_contract_stats.results | default([]) }}"
+      when: not ansible_check_mode
+
+    - name: Show the active capability/provider selection
+      ansible.builtin.debug:
+        msg: >-
+          {% for cap, cfg in workstation_capabilities.items() if cfg.enabled | default(true) %}
+          {{ cap }} -> {{ workstation_providers[cap] | default('none') }}{{ ', ' if not loop.last }}
+          {% endfor %}
