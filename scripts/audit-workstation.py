@@ -63,7 +63,8 @@ def main():
     rep.add("info", f"Read-only scan of {root}")
 
     data = {}
-    for path in sorted(set(walk_yaml(ansible))):
+    yaml_paths = set(walk_yaml(ansible)) | set(walk_yaml(root / "profiles"))
+    for path in sorted(yaml_paths):
         rel = path.relative_to(root)
         try:
             data[path] = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueLoader)
@@ -81,8 +82,8 @@ def main():
                 continue
             if (role / "tasks" / "main.yml").is_file():
                 continue
-            # Namespace directories (e.g. roles/providers/) hold roles one level deeper.
-            if any((child / "tasks" / "main.yml").is_file() for child in role.iterdir() if child.is_dir()):
+            # Provider namespaces may contain vendor/name roles at any depth.
+            if any(role.rglob("tasks/main.yml")):
                 continue
             rep.add("warnings", f"{role.relative_to(root)} has no tasks/main.yml")
 
@@ -91,7 +92,7 @@ def main():
     for parent in (ansible / "inventory" / "group_vars", ansible / "inventory" / "host_vars"):
         if parent.exists():
             var_paths.extend(p for p in data if parent in p.parents)
-    for path in (roles.glob("*/defaults/main.yml") if roles.exists() else []):
+    for path in (roles.rglob("defaults/main.yml") if roles.exists() else []):
         if path in data:
             var_paths.append(path)
     defs = collections.defaultdict(list)

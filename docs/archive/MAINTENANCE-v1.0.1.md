@@ -1,5 +1,9 @@
 # Maintenance release v1.0.1 — proposed
 
+> Historical record; these instructions are not the current deployment procedure. Use [DEPLOY](../DEPLOY.md) and the [routine checklist](../WORKSTATION-ROUTINE-CHECKLIST.md).
+
+The one-off `scripts/patch-backup-disable.py` has been removed: its fix is already part of `ansible/roles/providers/proton/drive/tasks/main.yml`. The commands below describe the original proposal and must not be followed on the current tree.
+
 This is a focused maintenance patch for the Phase 23 Proton Drive backup role. It is based on the previously supplied role, **not an inspection of the latest checkout**.
 
 ## Bug fixed

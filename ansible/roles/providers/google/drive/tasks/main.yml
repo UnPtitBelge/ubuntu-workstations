@@ -4,26 +4,9 @@
     workstation_backup_monitor_service: workstation-rclone-backup.service
     workstation_backup_monitor_timer: workstation-rclone-backup.timer
 
-- name: Detect deployed rclone backup timer when backups disabled
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-rclone-backup.timer"
-  register: disabled_rclone_timer_file
-  when: not workstation_backup_enabled | bool
-
-- name: Disable and stop deployed rclone backup timer when backups disabled
-  ansible.builtin.systemd_service:
-    name: workstation-rclone-backup.timer
-    scope: user
-    daemon_reload: true
-    enabled: false
-    state: stopped
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
-  when:
-    - not workstation_backup_enabled | bool
-    - disabled_rclone_timer_file.stat.exists | default(false)
-    - not ansible_check_mode
+- name: Stop existing backup schedules when scheduling is disabled
+  ansible.builtin.import_tasks: disable.yml
+  when: not (workstation_backup_enabled | bool) or not (workstation_backup_timer_enabled | bool)
 
 - name: Install rclone
   become: true
@@ -161,6 +144,5 @@
           'capability': workstation_capability | default(''),
           'provider': workstation_provider_path | default(ansible_role_name),
           'supported_actions': workstation_provider_supported_actions,
-          'manual_actions': workstation_provider_manual_actions,
-          'recorded_at': ansible_facts['date_time'].iso8601 } | to_nice_json }}
+          'manual_actions': workstation_provider_manual_actions } | to_nice_json }}
   when: not ansible_check_mode

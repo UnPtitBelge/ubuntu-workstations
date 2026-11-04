@@ -228,6 +228,22 @@ The playbook validates the profile exists (unknown name → error listing availa
 | `minimal` | Base packages, Fish/Ghostty, mise/uv/rustup bootstrap, security updates, monitoring only | none |
 | `headless` | Server: base, shell, languages, containers, monitoring; no GNOME | google/drive (rclone), syncthing, wireguard |
 
-Switching an existing host to a smaller profile: first set the legacy enable flags (`workstation_backup_enabled: false`, `workstation_syncthing_enabled: false`) and run once with the previous provider still selected so its units are stopped, then switch the profile. Never let a profile change delete data (see [MIGRATE.md](MIGRATE.md)).
+### Provider disabling and profile changes
+
+Provider selection and stopping an existing provider are separate operations:
+
+| Setting | Effect |
+| --- | --- |
+| Capability `enabled: false` or provider `none` | Skip that provider role; existing services, timers, packages and data are left in place |
+| `workstation_backup_enabled: false`, with the backup capability enabled and previous provider selected | Stop/disable that provider's existing backup and restore-drill timers; leave running jobs, data and credentials alone |
+| `workstation_backup_timer_enabled: false`, with the backup capability enabled and provider selected | Stop/disable both scheduled timers; keep backup configuration available for manual use |
+| `workstation_syncthing_enabled: false`, with sync capability enabled and `syncthing` selected | Stop/disable the existing Syncthing user service; preserve folders and device identity |
+| `workstation_syncthing_service_enabled: false`, with sync capability enabled and `syncthing` selected | Stop/disable its service while keeping Syncthing installed/configured |
+
+Before switching an existing host to a smaller profile, keep the previous profile, capability switches and providers selected. Set the relevant flags above, preview, then apply on that host during an approved maintenance window. Verify timer/service state before changing the profile or selecting `none`. This also applies to the `minimal` profile: its disabled capabilities cannot stop a skipped provider. Backup disabling stops future scheduling and does not interrupt a running upload or restore drill. Monitoring jobs and historical reports remain; review their configuration separately when retiring a capability.
+
+VPN disconnection and desktop application shutdown/account removal are manual operations; their adapters list `disable` under manual actions. A new provider selection never disables or decommissions the previous provider. Follow [MIGRATE.md](MIGRATE.md) for cutover. Never let a profile change delete data.
+
+To reverse a disable, restore the previous profile/provider/capability selections and enable flags, preview, and apply on the same host. Authentication, device identities and datasets are preserved.
 
 Adding a profile = adding one `profiles/<name>.yml` file — no playbook or role edits (see [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a profile"). Scope remains Ubuntu 26.04 LTS only.

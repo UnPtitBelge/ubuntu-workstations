@@ -57,7 +57,7 @@ A new host is now a **configuration-only** change plus documented manual enrollm
 - [ ] **Audit log and report retention**; rotate old reports without deleting backup data.
 - [ ] **Alert on missing scheduled executions**, not only failed last runs; verify stale-data thresholds against timer schedules.
 - [ ] **Make monitoring robust across sleep/offline intervals** and report missed executions with actionable context.
-- [ ] **Test idempotency automatically in CI**, with Ansible lint, YAML syntax, Python compilation and secret scanning.
+- [ ] **Test full provisioning idempotency automatically in a disposable VM**, and add Ansible lint. The shared `scripts/maintenance-check.py` gate now runs YAML audit, Python compilation, all playbook syntax checks, inventory parsing and isolated Ansible regression tests in local development and CI. Tests cover all provider contract records plus backup/Syncthing disable guards, absent units, check mode and second-pass convergence with simulated systemd; they do not prove live service behavior or whole-profile convergence. Secret scanning remains a separate CI job.
 - [ ] **Document approved upgrade policy** for pinned Node, Java, Rust and npm CLIs; keep update approval separate from installation.
 - [ ] **Improve rollback between repository revisions**; distinguish config rollback from data restoration.
 - [ ] **Version and test backup selection/exclusions** so changing tools cannot silently alter protected datasets.

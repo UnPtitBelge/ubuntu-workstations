@@ -1,4 +1,8 @@
 ---
+- name: Stop existing Syncthing service when disabled
+  ansible.builtin.import_tasks: disable.yml
+  when: not (workstation_syncthing_enabled | bool) or not (workstation_syncthing_service_enabled | bool)
+
 - name: Install Syncthing
   become: true
   ansible.builtin.apt:
@@ -81,6 +85,5 @@
           'capability': workstation_capability | default(''),
           'provider': workstation_provider_path | default(ansible_role_name),
           'supported_actions': workstation_provider_supported_actions,
-          'manual_actions': workstation_provider_manual_actions,
-          'recorded_at': ansible_facts['date_time'].iso8601 } | to_nice_json }}
+          'manual_actions': workstation_provider_manual_actions } | to_nice_json }}
   when: not ansible_check_mode

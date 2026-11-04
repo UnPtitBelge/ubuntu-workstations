@@ -39,7 +39,7 @@ Machine names in the docs (`my-desktop`, `my-laptop`) are placeholders. Your rea
 ```text
 .
 ├── .github/
-│   ├── workflows/ci.yml             # CI: gitleaks secret scan + YAML/Python/Ansible static checks
+│   ├── workflows/ci.yml             # CI: gitleaks + shared validation gate and regression tests
 │   └── dependabot.yml               # Dependabot: Actions + pip (requirements.txt)
 ├── .gitattributes                   # LF normalization; binary assets untouched
 ├── LICENSE                          # MIT
@@ -104,15 +104,17 @@ Machine names in the docs (`my-desktop`, `my-laptop`) are placeholders. Your rea
 │   ├── TODO.md                      # Prioritized implementation gaps
 │   ├── PUBLIC-RELEASE-AUDIT.md      # Security/privacy/portability audit behind the public release
 │   ├── REPOSITORY-AUDIT.md
-│   └── release checklists + compatibility notes
+│   ├── archive/                     # Historical release/maintenance instructions
+│   └── compatibility notes
+├── tests/                           # Isolated Ansible regression tests; simulated systemd
 └── scripts/                         # repository utilities (audit, bootstrap, onboarding, preflight collector, maintenance gate)
 ```
 
-The tree above describes the v1.3.0 layout; optional assets and documentation may vary. Shared defaults belong in role defaults and `inventory/group_vars/all.yml`; host-specific settings belong in `inventory/host_vars/`. Don't copy device IDs, application sessions or credentials between machines.
+The tree above describes the current working-tree layout, including additions since v1.3.0; optional assets and documentation may vary. Shared defaults belong in role defaults and `inventory/group_vars/all.yml`; host-specific settings belong in `inventory/host_vars/`. Don't copy device IDs, application sessions or credentials between machines.
 
 ## Portability roadmap
 
-The configuration is **tested on two named Ubuntu workstations** and is not yet a universal installer. Capabilities (backup, sync, VPN, mail, passwords) are now separated from **providers** via `workstation_capabilities` / `workstation_providers` (see [DEPLOY.md](docs/DEPLOY.md) §4 and [PROVIDERS.md](docs/PROVIDERS.md)): the playbook dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/`, with Proton/Syncthing built-ins reproducing the original setup and a `custom` escape hatch — contributors add their own vendor directory and select it by name (see [CONTRIBUTING.md](CONTRIBUTING.md)). Ubuntu 26.04 LTS only for now. Additional provider adapters (Google via rclone/Thunderbird, self-hosted VPS stacks, …) are the next step; per-host secrets and data migration remain explicit (see [MIGRATE.md](docs/MIGRATE.md)).
+The configuration is **tested on two named Ubuntu workstations** and is not yet a universal installer. Capabilities (backup, sync, VPN, mail, passwords) are now separated from **providers** via `workstation_capabilities` / `workstation_providers` (see [DEPLOY.md](docs/DEPLOY.md) §4 and [PROVIDERS.md](docs/PROVIDERS.md)): the playbook dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/`, with Proton/Syncthing built-ins reproducing the original setup and a `custom` escape hatch — contributors add their own vendor directory and select it by name (see [CONTRIBUTING.md](CONTRIBUTING.md)). Ubuntu 26.04 LTS only for now. Built-in alternatives include Google via rclone/Thunderbird, WireGuard and KeePassXC; further adapters and real migration rehearsals remain future work. Per-host secrets and data migration remain explicit (see [MIGRATE.md](docs/MIGRATE.md)).
 
 - **[DEPLOY.md](docs/DEPLOY.md):** deploy an existing host today; design and acceptance criteria for new generic workstations.
 - **[PROVIDERS.md](docs/PROVIDERS.md):** capability/provider selection (Proton, Google via rclone/Thunderbird, WireGuard, KeePassXC, or your own self-hosted stack).
@@ -307,15 +309,17 @@ proton-drive filesystem list /my-files
 ## Tests, recovery and safe operations
 
 ```fish
-# Repository audit (read-only)
+# Repository validation shared with CI (no provisioning)
 cd ~/Projects/ubuntu-workstations
-python3 scripts/audit-workstation.py .
+python3 scripts/maintenance-check.py
 
 # Strict machine validation (choose the host you're on)
 cd ansible
 ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true --limit desktop
 # On the laptop: use --limit laptop.
 ```
+
+The gate runs repository audit, Python compilation, isolated Ansible regression tests, all playbook syntax checks and inventory parsing. See [tests/README.md](tests/README.md) for coverage and limitations. For the audit alone, use `python3 scripts/audit-workstation.py .`.
 
 The optional `rehearsal-headless.yml` playbook tests foundational provisioning in a disposable VM; it does **not** validate GNOME visuals, Proton logins, Syncthing pairing or authenticated user-session services.
 
@@ -328,7 +332,7 @@ The optional `rehearsal-headless.yml` playbook tests foundational provisioning i
 - **[Installation guide](docs/WORKSTATION-INSTALL.md)** — new-machine setup and initial credentials/pairing.
 - **[Recovery guide](docs/WORKSTATION-RECOVERY.md)** — restore drills and workstation reconstruction.
 - **[Repository audit](docs/REPOSITORY-AUDIT.md)** — configuration inspection and cleanup procedures.
-- **[v1.2.0 release checklist](docs/v1.2.0-release-checklist.md)** — release acceptance checks.
+- **[v1.2.0 release checklist](docs/archive/v1.2.0-release-checklist.md)** — historical release acceptance checks; current procedure is in the routine checklist.
 - **[Ubuntu 26.04 compatibility notes](docs/ubuntu-26.04-compatibility.md)** — known platform quirk (`sudo-rs` vs Ansible).
 - **[Public release audit](docs/PUBLIC-RELEASE-AUDIT.md)** — security, privacy and portability findings before publishing this repository.
 - **[Security policy](SECURITY.md)** — how to report a vulnerability privately.

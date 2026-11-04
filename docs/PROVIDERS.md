@@ -80,7 +80,7 @@ ansible/roles/providers/
 - Health output: write `~/.local/state/workstation-<capability>/latest.txt` containing exactly one `OVERALL:` line, and register it in `workstation_report_sources` so the weekly report and GNOME alerts pick it up. Backup providers must additionally write `~/.local/state/workstation-backup/status.json` + `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script (schema in MIGRATE.md §5).
 - Preflight inventory is repository-side: extend `scripts/preflight-collect.py` with a section for your provider (never print secrets; truncate device IDs).
 - Secrets stay in `~/.config`, the keyring, or mode-0600 files — never in Git, never in backup sources.
-- Switching providers never deletes data, revokes sessions, or uninstalls the old provider. `disable` stops units and leaves data in place.
+- Switching providers never deletes data, revokes sessions, or uninstalls the old provider. `disable`, where supported, uses the explicit flags in [DEPLOY](DEPLOY.md#provider-disabling-and-profile-changes) to stop managed units and leave data in place. Capability `enabled: false` and provider `none` only skip dispatch. VPN disconnection and desktop application shutdown/account removal are manual and are declared as such in their contracts.
 
 ## Self-hosted example: one VPS
 

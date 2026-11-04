@@ -262,4 +262,4 @@ and git push origin main
 
 ---
 
-**See also:** [Routine Checklist](WORKSTATION-ROUTINE-CHECKLIST.md) · `docs/v1.2.0-release-checklist.md` · repository installation/recovery docs.
+**See also:** [Routine Checklist](WORKSTATION-ROUTINE-CHECKLIST.md) · [Historical v1.2.0 checklist](archive/v1.2.0-release-checklist.md) · repository installation/recovery docs.

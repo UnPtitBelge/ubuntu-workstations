@@ -1,0 +1,26 @@
+---
+# Stop future invocations; never interrupt an in-progress backup or restore.
+- name: Detect deployed backup and restore-drill timers
+  become: false
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/{{ item }}"
+  loop:
+    - workstation-rclone-backup.timer
+    - workstation-rclone-backup-restore-test.timer
+  register: disabled_backup_timers
+
+- name: Disable and stop existing backup and restore-drill timers
+  become: false
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}"
+    scope: user
+    daemon_reload: true
+    enabled: false
+    state: stopped
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  loop: "{{ disabled_backup_timers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists | default(false)

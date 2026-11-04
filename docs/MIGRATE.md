@@ -160,7 +160,7 @@ workstation_provider_supported_actions: [install, configure, health, disable]   
 workstation_provider_manual_actions: [export, import, verify, cutover]           # whatever the backend does not support
 ```
 
-and records it during provisioning at `~/.local/state/workstation-provider/<provider>.json` (`schema_version`, `capability`, `provider`, `supported_actions`, `manual_actions`, `recorded_at`). `workstation.yml` verifies every selected provider recorded its contract, so a contributed provider must state what it implements and what stays manual. Backup providers additionally write the normalized `status.json`, append to `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script.
+and records it during provisioning at `~/.local/state/workstation-provider/<provider>.json` (`schema_version`, `capability`, `provider`, `supported_actions`, `manual_actions`). Contract records are declarative: they contain no per-run timestamp, so an unchanged contract stays unchanged on a second provisioning pass. Existing records lose the old `recorded_at` field once on reconciliation. `workstation.yml` verifies every selected provider recorded its contract, so a contributed provider must state what it implements and what stays manual. Backup providers additionally write the normalized `status.json`, append to `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script.
 
 ```yaml
 # Active schema (defaults reproduce the original Proton + Syncthing setup)
@@ -182,7 +182,7 @@ workstation_migration:
   retain_source: true
 ```
 
-**Adapter actions** (the contract above; implement per capability, not as one universal data serializer). The actions `preflight` and `health` are provided repository-side: `playbooks/provider-preflight.yml` + `scripts/preflight-collect.py` for preflight, and the `workstation_health_*` lists / report sources for health. Provider roles implement `install`/`configure`/`disable` and, for backup, `verify` (restore drill):
+**Adapter actions** (the contract above; implement per capability, not as one universal data serializer). The actions `preflight` and `health` are provided repository-side: `playbooks/provider-preflight.yml` + `scripts/preflight-collect.py` for preflight, and the `workstation_health_*` lists / report sources for health. Provider roles implement `install`/`configure` and, where declared, `disable`; backup providers also implement `verify` (restore drill). Desktop application shutdown/account removal and VPN disconnection remain manual. See [DEPLOY](DEPLOY.md#provider-disabling-and-profile-changes) for the exact disable flags and dispatch boundaries:
 
 | Action | Promise |
 | --- | --- |

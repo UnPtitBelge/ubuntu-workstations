@@ -1,0 +1,23 @@
+---
+- name: Detect installed Syncthing user service
+  become: false
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/syncthing.service"
+    - /etc/systemd/user/syncthing.service
+    - /usr/lib/systemd/user/syncthing.service
+  register: disabled_syncthing_units
+
+- name: Disable and stop existing Syncthing user service
+  become: false
+  ansible.builtin.systemd_service:
+    name: syncthing.service
+    scope: user
+    daemon_reload: true
+    enabled: false
+    state: stopped
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when: disabled_syncthing_units.results | selectattr('stat.exists') | list | length > 0

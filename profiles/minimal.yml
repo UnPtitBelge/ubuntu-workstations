@@ -22,8 +22,9 @@ workstation_providers:
   passwords: none
 
 # Legacy enable flags kept in sync so switching an existing host to this
-# profile also stops the backup/sync units on the next run (run once with the
-# previous provider still selected if the host had them enabled).
+# profile expresses disabled intent. Before switching, run once with the
+# previous profile/capabilities/providers selected and these flags false to
+# stop existing backup/sync units (see docs/DEPLOY.md).
 workstation_backup_enabled: false
 workstation_syncthing_enabled: false
 

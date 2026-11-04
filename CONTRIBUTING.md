@@ -37,11 +37,11 @@ improvements, portability patches and **new providers** are welcome.
    ```
 
    On the laptop, run the same commands on the laptop with `--limit laptop`.
-3. Run the repository-level read-only checks:
+3. Run the repository validation gate shared with CI (no provisioning; tests use temporary homes and simulated systemd):
 
    ```fish
    cd ~/Projects/ubuntu-workstations
-   python3 scripts/audit-workstation.py .
+   python3 scripts/maintenance-check.py
    gitleaks detect --source . --redact   # if gitleaks is installed locally
    ```
 
@@ -100,9 +100,12 @@ Rules for a new provider:
 5. **Unit naming:** use provider-specific unit names
    (e.g. `workstation-rclone-backup.*`), never rename existing units in place,
    so old and new providers can run side by side during a migration.
-6. **Disable semantics:** setting a capability's provider to `none` or its
-   `enabled: false` must stop/disable the provider's units without touching
-   data or credentials.
+6. **Disable semantics:** capability `enabled: false` and provider `none` skip
+   dispatch; they never implicitly stop a previous provider. Implement an explicit
+   disable flag for managed units, including auxiliary timers, and test it with
+   existing and absent units. Preserve data and credentials. If runtime shutdown
+   is manual, list `disable` in `workstation_provider_manual_actions` rather than
+   claiming support. See [DEPLOY.md](docs/DEPLOY.md#provider-disabling-and-profile-changes).
 7. **Validate before opening the PR:** `--syntax-check`, `--list-tasks` with your
    provider selected via `-e`, a `--check --diff` run, the repo audit script,
    and gitleaks. Update `docs/PROVIDERS.md` (table row: capability, provider,
@@ -121,8 +124,9 @@ Rules:
    toggles, and (if the role set changes) `workstation_health_system_services` /
    `workstation_health_user_services`.
 2. Keep the legacy enable flags (`workstation_backup_enabled`,
-   `workstation_syncthing_enabled`, `workstation_backup_timer_enabled`) in sync
-   with the capability flags so switching profiles stops units cleanly.
+   `workstation_syncthing_enabled`, `workstation_backup_timer_enabled`) consistent
+   with the capability flags. For existing hosts, stop the previous provider
+   explicitly before switching to a profile that skips it (see DEPLOY above).
 3. A profile must never delete data or credentials; it only selects what Ansible
    installs/starts (migration rules: [MIGRATE.md](docs/MIGRATE.md)).
 4. Ubuntu 26.04 LTS only — no distro conditionals.
