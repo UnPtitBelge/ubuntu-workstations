@@ -7,6 +7,24 @@
     providers_root: "{{ (playbook_dir ~ '/../roles/providers') | realpath }}"
 
   pre_tasks:
+    - name: Discover available profiles
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../../profiles"
+        patterns: "*.yml"
+        file_type: file
+      register: workstation_profile_files
+
+    - name: Validate the selected profile
+      ansible.builtin.assert:
+        that:
+          - workstation_profile in workstation_available_profiles
+        fail_msg: >-
+          Unknown profile '{{ workstation_profile }}'.
+          Available profiles: {{ workstation_available_profiles | join(', ') }}.
+          Add your own at profiles/<name>.yml (see docs/DEPLOY.md section 8, CONTRIBUTING.md).
+      vars:
+        workstation_available_profiles: "{{ workstation_profile_files.files | map(attribute='path') | map('basename') | map('regex_replace', '\\.yml$', '') | list | sort }}"
+
     - name: Discover available provider roles
       ansible.builtin.find:
         paths: "{{ providers_root }}"
@@ -97,12 +115,19 @@
     - base
     - shell
     - bootstrap
-    - languages
-    - containers
-    - virtualization
+
+    # Foundation roles gated by profile toggles (workstation_role_*, default true).
+    - role: languages
+      when: workstation_role_languages | default(true) | bool
+    - role: containers
+      when: workstation_role_containers | default(true) | bool
+    - role: virtualization
+      when: workstation_role_virtualization | default(true) | bool
 
     - role: gnome
-      when: workstation_hardware_has_gnome_session | default(false) | bool
+      when:
+        - workstation_role_gnome | default(true) | bool
+        - workstation_hardware_has_gnome_session | default(false) | bool
 
     - maintenance
 

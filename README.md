@@ -149,6 +149,8 @@ and ansible-playbook playbooks/validate-workstation.yml -e audit_enforce=true --
 ansible-playbook playbooks/workstation.yml -K --limit $target
 ```
 
+The default setup is the `developer_gnome` **profile** (`profiles/developer_gnome.yml`). Other bundled setups: `minimal` (base + monitoring only) and `headless` (server with rclone/Syncthing/WireGuard) — select one via `workstation_profile: minimal` in `host_vars/<host>.yml` or `-e workstation_profile=minimal` (see [DEPLOY.md](docs/DEPLOY.md) §8). Add your own profile as a single `profiles/<name>.yml` file.
+
 Aim for `failed=0` and **`changed=0`** on the second run. A check-mode preview cannot guarantee that a subsequent real run will succeed; some setup tasks are intentionally skipped in check mode. GNOME settings require a suitable graphical session; logging out and back in may be necessary for some changes.
 
 ### Use this setup on your own machine (template onboarding)

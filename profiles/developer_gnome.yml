@@ -1,0 +1,27 @@
+---
+# Default profile: the original full GNOME developer workstation.
+# Equivalent to the pre-profile behavior — desktop, dev toolchains, containers,
+# virtualization, Proton providers, backups and monitoring.
+description: >-
+  Full GNOME developer workstation: desktop settings, development toolchains,
+  Docker/Containerlab, QEMU/Multipass, Proton (Drive backup, VPN, Pass, Mail),
+  Syncthing, security updates and the full monitoring stack.
+
+workstation_capabilities:
+  backup: {enabled: true}
+  sync: {enabled: true}
+  vpn: {enabled: true}
+  mail: {enabled: true}
+  passwords: {enabled: true}
+
+workstation_providers:
+  backup: proton/drive
+  sync: syncthing
+  vpn: proton/vpn
+  mail: proton/mail
+  passwords: proton/pass
+
+workstation_role_gnome: true
+workstation_role_containers: true
+workstation_role_virtualization: true
+workstation_role_languages: true

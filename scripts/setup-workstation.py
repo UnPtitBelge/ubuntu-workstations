@@ -75,9 +75,20 @@ def load_data(path: Path) -> dict:
     if device_class not in ("desktop", "laptop"):
         sys.exit("ERROR: device_class must be 'desktop' or 'laptop'.")
 
+    profile = str(data.get("profile", "developer_gnome")).strip()
+    if not re.match(r"^[A-Za-z0-9_-]+$", profile):
+        sys.exit("ERROR: profile must contain only letters, digits, '_' and '-'.")
+    profiles_dir = ROOT / "profiles"
+    available = sorted(p.stem for p in profiles_dir.glob("*.yml")) if profiles_dir.is_dir() else []
+    if profile not in available:
+        sys.exit(f"ERROR: unknown profile '{profile}'. Available: {', '.join(available) or 'none'} "
+                 f"(add profiles/{profile}.yml — see docs/DEPLOY.md section 8 and CONTRIBUTING.md).")
+    data["profile"] = profile
+
     data["inventory_host"] = host
     data["hostname"] = hostname
     data["device_class"] = device_class
+    data["workstation_profile"] = profile
     data.setdefault("syncthing_enabled", True)
     data.setdefault("backup_enabled", True)
     data.setdefault("backup_timer_enabled", False)
@@ -86,6 +97,8 @@ def load_data(path: Path) -> dict:
             sys.exit(f"ERROR: {key} must be true or false.")
 
     passthrough = {k: v for k, v in data.items() if k.startswith("workstation_")}
+    # `profile` is mapped to workstation_profile above; drop the friendly key.
+    data.pop("profile", None)
     clash = sorted(set(passthrough) & RESERVED_KEYS)
     if clash:
         sys.exit(f"ERROR: do not set {', '.join(clash)} directly; use the friendly names at the top of the file.")
@@ -169,6 +182,7 @@ def main() -> int:
     changed_hosts = ensure_host_entry(host)
 
     print(f"inventory host : {host}")
+    print(f"profile        : {data['workstation_profile']}")
     print(f"hostname       : {data['hostname']} ({data['device_class']})")
     print(f"host_vars      : {'updated' if changed_vars else 'unchanged'} "
           f"({HOSTVARS_DIR / (host + '.yml')})")

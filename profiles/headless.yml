@@ -1,0 +1,36 @@
+---
+# Headless / server workstation: base, shell, toolchain managers, languages and
+# containers, security updates and monitoring — no GNOME. Backup via rclone
+# (Google Drive or SFTP/S3 to your own VPS), sync via Syncthing, VPN via
+# WireGuard.
+description: >-
+  Headless server profile: packages, shell, dev toolchains, Docker/Containerlab,
+  security updates, monitoring; rclone backup, Syncthing sync, WireGuard VPN.
+  No GNOME, no desktop apps.
+
+workstation_capabilities:
+  backup: {enabled: true}
+  sync: {enabled: true}
+  vpn: {enabled: true}
+  mail: {enabled: false}
+  passwords: {enabled: false}
+
+workstation_providers:
+  backup: google/drive
+  sync: syncthing
+  vpn: wireguard
+  mail: none
+  passwords: none
+
+# Enable the backup timer only after Proton/rclone auth and a tested restore.
+workstation_backup_timer_enabled: false
+
+workstation_role_gnome: false
+workstation_role_containers: true
+workstation_role_virtualization: false
+workstation_role_languages: true
+
+workstation_health_system_services:
+  - docker.service
+workstation_health_user_services:
+  - syncthing.service

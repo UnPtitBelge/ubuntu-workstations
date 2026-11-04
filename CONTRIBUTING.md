@@ -94,6 +94,29 @@ Rules for a new provider:
    and gitleaks. Update `docs/PROVIDERS.md` (table row: capability, provider,
    role path, account/subscription, secret location).
 
+## Adding a profile (a new "setup template")
+
+Profiles are data, not code: one file in `profiles/<name>.yml`. The playbook
+validates that the selected profile exists and fails with the list of available
+ones. No playbook or role edits are needed.
+
+Rules:
+
+1. Copy `profiles/developer_gnome.yml` as a starting point; set `description`,
+   `workstation_capabilities`, `workstation_providers`, the `workstation_role_*`
+   toggles, and (if the role set changes) `workstation_health_system_services` /
+   `workstation_health_user_services`.
+2. Keep the legacy enable flags (`workstation_backup_enabled`,
+   `workstation_syncthing_enabled`, `workstation_backup_timer_enabled`) in sync
+   with the capability flags so switching profiles stops units cleanly.
+3. A profile must never delete data or credentials; it only selects what Ansible
+   installs/starts (migration rules: [MIGRATE.md](docs/MIGRATE.md)).
+4. Ubuntu 26.04 LTS only — no distro conditionals.
+5. Validate: `--syntax-check`, `--list-tasks -e workstation_profile=<name>`, a
+   `--check --diff` run for your profile, the repo audit script and gitleaks.
+   Document the profile in `docs/DEPLOY.md` §8 (table row) and mention it in
+   `README.md` if it is a starter profile.
+
 ## Reporting security issues
 
 See [SECURITY.md](SECURITY.md). Please do not open public issues for

@@ -70,28 +70,33 @@ workstation_report_sources:
     expected: HEALTHY
     max_age_hours: 192
 
-# Capability switches and provider selection (see docs/DEPLOY.md section 4 and
-# docs/MIGRATE.md section 5). The defaults below reproduce the original v1.2.0
-# setup (Proton + Syncthing), so existing hosts see no behavior change.
-# Set a provider to 'none' (with the capability enabled) to skip it, or drop
-# your own role into ansible/roles/providers/<name>/ and select <name>.
-workstation_capabilities:
-  backup: {enabled: true}
-  sync: {enabled: true}
-  vpn: {enabled: true}
-  mail: {enabled: true}
-  passwords: {enabled: true}
+# Setup profile (multi-setup): profiles/<workstation_profile>.yml provides the
+# defaults for everything below, loaded here at inventory level so host_vars can
+# still override any individual key per machine. The default profile reproduces
+# the original full desktop setup, so existing hosts see no behavior change.
+workstation_profile: developer_gnome
+_profile_data: "{{ lookup('file', inventory_dir ~ '/../../profiles/' ~ workstation_profile ~ '.yml') | from_yaml }}"
 
-workstation_providers:
-  backup: proton/drive
-  sync: syncthing
-  vpn: proton/vpn
-  mail: proton/mail
-  passwords: proton/pass
+workstation_capabilities: "{{ _profile_data.workstation_capabilities | default({'backup': {'enabled': true}, 'sync': {'enabled': true}, 'vpn': {'enabled': true}, 'mail': {'enabled': true}, 'passwords': {'enabled': true}}) }}"
+workstation_providers: "{{ _profile_data.workstation_providers | default({'backup': 'proton/drive', 'sync': 'syncthing', 'vpn': 'proton/vpn', 'mail': 'proton/mail', 'passwords': 'proton/pass'}) }}"
 
-# Enable automated backups on all workstations (any backup provider).
-workstation_backup_enabled: true
-workstation_backup_timer_enabled: true
+# Foundation role toggles (profiles override these; all default to true).
+workstation_role_gnome: "{{ _profile_data.workstation_role_gnome | default(true) }}"
+workstation_role_containers: "{{ _profile_data.workstation_role_containers | default(true) }}"
+workstation_role_virtualization: "{{ _profile_data.workstation_role_virtualization | default(true) }}"
+workstation_role_languages: "{{ _profile_data.workstation_role_languages | default(true) }}"
+
+# Enable flags and health-check lists (profiles may override; defaults = original).
+workstation_backup_enabled: "{{ _profile_data.workstation_backup_enabled | default(true) }}"
+workstation_backup_timer_enabled: "{{ _profile_data.workstation_backup_timer_enabled | default(true) }}"
+workstation_syncthing_enabled: "{{ _profile_data.workstation_syncthing_enabled | default(true) }}"
+workstation_health_system_services: "{{ _profile_data.workstation_health_system_services | default(['docker.service']) }}"
+workstation_health_user_services: "{{ _profile_data.workstation_health_user_services | default(['syncthing.service']) }}"
+
+# Capability switches and provider selection semantics: see docs/DEPLOY.md
+# section 4, docs/PROVIDERS.md and docs/MIGRATE.md section 5. Set a provider to
+# 'none' (with the capability enabled) to skip it, or drop your own role into
+# ansible/roles/providers/<vendor>/<name>/ and select <vendor>/<name>.
 
 # Capability-level backup settings shared by every backup provider
 # (providers/proton_drive, providers/rclone_gdrive, ...). Provider-specific

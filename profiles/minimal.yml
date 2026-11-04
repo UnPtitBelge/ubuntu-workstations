@@ -1,0 +1,37 @@
+---
+# Minimal base workstation: system packages, Fish shell, toolchain managers
+# (mise/uv/rustup bootstrap), security updates and the monitoring stack.
+# No desktop, containers, virtualization, language toolchains or providers.
+description: >-
+  Minimal base: packages, Fish/Ghostty shell, mise/uv/rustup bootstrap,
+  unattended security updates and health/drift/weekly monitoring. No GNOME,
+  no containers, no virtualization, no external providers.
+
+workstation_capabilities:
+  backup: {enabled: false}
+  sync: {enabled: false}
+  vpn: {enabled: false}
+  mail: {enabled: false}
+  passwords: {enabled: false}
+
+workstation_providers:
+  backup: none
+  sync: none
+  vpn: none
+  mail: none
+  passwords: none
+
+# Legacy enable flags kept in sync so switching an existing host to this
+# profile also stops the backup/sync units on the next run (run once with the
+# previous provider still selected if the host had them enabled).
+workstation_backup_enabled: false
+workstation_syncthing_enabled: false
+
+workstation_role_gnome: false
+workstation_role_containers: false
+workstation_role_virtualization: false
+workstation_role_languages: false
+
+# Health checks follow the reduced role set (no docker/syncthing units here).
+workstation_health_system_services: []
+workstation_health_user_services: []

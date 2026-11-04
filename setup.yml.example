@@ -14,6 +14,8 @@
 inventory_host: myworkstation   # inventory name used with --limit (letters, digits, _ and -)
 hostname: my-machine            # actual hostname of this machine; the backup destination uses it
 device_class: desktop           # desktop | laptop
+profile: developer_gnome        # setup template from profiles/ — developer_gnome, minimal, headless, ...
+                                # (see docs/DEPLOY.md section 8)
 
 # Feature flags (same names as the role defaults):
 syncthing_enabled: true

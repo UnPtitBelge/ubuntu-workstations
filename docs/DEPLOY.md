@@ -194,3 +194,24 @@ Behavior notes:
 - Tool binaries under `~/.local`, `~/.cargo`, `~/.rustup` and `~/.local/share/mise` are intentionally **not** backed up — they are reproducible from this repository. Back up only tool *data*.
 - Each successful backup writes a normalized record to `~/.local/state/workstation-backup/status.json` (schema in [MIGRATE.md](MIGRATE.md) §5: `schema_version`, `capability`, `provider`, `host`, `dataset_id`, `checked_at`, `result`, `verified_restore_at`). `workstation-backup-health-check` consumes that record and falls back to the legacy `last-success` stamp for older deployments, so a future backup provider can be monitored without changing the monitor. The systemd unit names remain Proton-specific until a reviewed migration renames them.
 - New APT groups in `workstation_post_update_groups` get a generic "package still installed" check after upgrades; `docker` and `proton` keep their deeper service checks.
+
+## 8. Profiles — multiple setups from one repository (implemented)
+
+A **profile** is one YAML file in `profiles/<name>.yml` that bundles a coherent setup: capabilities, providers, foundation-role toggles and health-check lists. Select it per host:
+
+```yaml
+# host_vars/<host>.yml (or `profile:` in setup.local.yml, or -e workstation_profile=<name>)
+workstation_profile: developer_gnome
+```
+
+The playbook validates the profile exists (unknown name → error listing available profiles) and the profile supplies defaults at inventory level, so `host_vars` can still override any individual key per machine. Built-in profiles:
+
+| Profile | Contents | Providers |
+| --- | --- | --- |
+| `developer_gnome` (default) | Full GNOME desktop: GNOME, toolchains, Docker/Containerlab, QEMU/Multipass, backups, full monitoring | proton/drive, syncthing, proton/vpn, proton/mail, proton/pass |
+| `minimal` | Base packages, Fish/Ghostty, mise/uv/rustup bootstrap, security updates, monitoring only | none |
+| `headless` | Server: base, shell, languages, containers, monitoring; no GNOME | google/drive (rclone), syncthing, wireguard |
+
+Switching an existing host to a smaller profile: first set the legacy enable flags (`workstation_backup_enabled: false`, `workstation_syncthing_enabled: false`) and run once with the previous provider still selected so its units are stopped, then switch the profile. Never let a profile change delete data (see [MIGRATE.md](MIGRATE.md)).
+
+Adding a profile = adding one `profiles/<name>.yml` file — no playbook or role edits (see [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a profile"). Scope remains Ubuntu 26.04 LTS only.
