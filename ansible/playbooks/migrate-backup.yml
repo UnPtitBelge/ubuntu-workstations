@@ -118,7 +118,7 @@
               - --dataset-id
               - "{{ workstation_backup_dataset_id | default('') }}"
               - --output
-              - "{{ migration_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}_{{ ansible_date_time.time | regex_replace(':', '') }}.txt"
+              - "{{ migration_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_facts['date_time'].date }}_{{ ansible_facts['date_time'].time | regex_replace(':', '') }}.txt"
           register: migration_preflight
           changed_when: false
           check_mode: false
@@ -141,11 +141,11 @@
 
         - name: Write the migration plan (local state only)
           ansible.builtin.copy:
-            dest: "{{ migration_state_dir }}/plan-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}_{{ ansible_date_time.time | regex_replace(':', '') }}.json"
+            dest: "{{ migration_state_dir }}/plan-{{ ansible_facts['hostname'] }}-{{ ansible_facts['date_time'].date }}_{{ ansible_facts['date_time'].time | regex_replace(':', '') }}.json"
             mode: '0600'
             content: >-
               {{ {'host': ansible_facts['hostname'],
-                  'created_at': ansible_date_time.iso8601,
+                  'created_at': ansible_facts['date_time'].iso8601,
                   'from_provider': workstation_providers.backup | default('proton/drive'),
                   'to_provider': migration_new_provider,
                   'remote_destination': workstation_backup_remote_parent | default(workstation_rclone_remote_parent | default('')),
@@ -191,7 +191,7 @@
           ansible.builtin.lineinfile:
             path: "{{ migration_state_dir }}/cutover.jsonl"
             line: >-
-              {{ {'time': ansible_date_time.iso8601, 'host': ansible_facts['hostname'],
+              {{ {'time': ansible_facts['date_time'].iso8601, 'host': ansible_facts['hostname'],
                   'action': 'cutover', 'from': workstation_providers.backup | default('proton/drive'),
                   'to': migration_new_provider} | to_json }}
             create: true
@@ -238,7 +238,7 @@
           ansible.builtin.lineinfile:
             path: "{{ migration_state_dir }}/cutover.jsonl"
             line: >-
-              {{ {'time': ansible_date_time.iso8601, 'host': ansible_facts['hostname'],
+              {{ {'time': ansible_facts['date_time'].iso8601, 'host': ansible_facts['hostname'],
                   'action': 'rollback', 'to': workstation_providers.backup | default('proton/drive'),
                   'from': migration_new_provider} | to_json }}
             create: true

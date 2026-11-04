@@ -12,8 +12,8 @@
   vars:
     preflight_state_dir: "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-migration"
     preflight_report: >-
-      {{ preflight_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_date_time.date }}
-      _{{ ansible_date_time.time | regex_replace(':', '') }}.txt
+      {{ preflight_state_dir }}/preflight-{{ ansible_facts['hostname'] }}-{{ ansible_facts['date_time'].date }}
+      _{{ ansible_facts['date_time'].time | regex_replace(':', '') }}.txt
     preflight_backup_remote_parent: >-
       {{ workstation_backup_remote_parent | default('') or workstation_rclone_remote_parent | default('') }}
 

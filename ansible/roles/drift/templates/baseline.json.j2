@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "description": "Baseline generated after Ansible workstation provisioning. Re-running Ansible refreshes it; the drift checker logs every re-baseline to baseline-updates.jsonl.",
-  "generated_at": "{{ ansible_date_time.iso8601 }}",
+  "generated_at": "{{ ansible_facts['date_time'].iso8601 }}",
   "host": "{{ ansible_facts['hostname'] }}",
   "files": [
 {% for result in workstation_drift_file_stats.results %}

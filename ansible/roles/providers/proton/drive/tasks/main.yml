@@ -245,5 +245,5 @@
           'provider': workstation_provider_path | default(ansible_role_name),
           'supported_actions': workstation_provider_supported_actions,
           'manual_actions': workstation_provider_manual_actions,
-          'recorded_at': ansible_date_time.iso8601 } | to_nice_json }}
+          'recorded_at': ansible_facts['date_time'].iso8601 } | to_nice_json }}
   when: not ansible_check_mode

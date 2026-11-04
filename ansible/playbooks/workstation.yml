@@ -13,14 +13,14 @@
           - ansible_facts['distribution'] == workstation_supported_distribution
           - ansible_facts['distribution_version'] == workstation_supported_release
           - ansible_version.full is version(workstation_min_ansible_core, '>=')
-          - ansible_python_version is version(workstation_min_python, '>=')
+          - ansible_facts['python_version'] is version(workstation_min_python, '>=')
         fail_msg: >-
           Unsupported platform: this repository targets
           {{ workstation_supported_distribution }} {{ workstation_supported_release }},
           ansible-core >= {{ workstation_min_ansible_core }},
           Python >= {{ workstation_min_python }}.
           Found: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
-          ansible-core {{ ansible_version.full }}, Python {{ ansible_python_version }}.
+          ansible-core {{ ansible_version.full }}, Python {{ ansible_facts['python_version'] }}.
           See docs/DEPLOY.md section 2 (prerequisites and release compatibility).
 
     - name: Assert the declared machine identity matches this host
