@@ -13,6 +13,9 @@ __pycache__/
 *.secret
 *.secrets
 
+# Local fill-in data for scripts/setup-workstation.py (personal values, never commit)
+/setup.local.yml
+
 # Fish machine-specific state
 fish_variables
 

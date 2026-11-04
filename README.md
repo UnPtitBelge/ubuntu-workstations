@@ -150,6 +150,19 @@ ansible-playbook playbooks/workstation.yml -K --limit $target
 
 Aim for `failed=0` and **`changed=0`** on the second run. A check-mode preview cannot guarantee that a subsequent real run will succeed; some setup tasks are intentionally skipped in check mode. GNOME settings require a suitable graphical session; logging out and back in may be necessary for some changes.
 
+### Use this setup on your own machine (template onboarding)
+
+Instead of editing the inventory by hand, fill in one file and let the script generate the host entry and variables:
+
+```fish
+cd ~/Projects/ubuntu-workstations
+cp setup.yml.example setup.local.yml    # setup.local.yml is gitignored — never commit it
+$EDITOR setup.local.yml                 # inventory_host, hostname, device_class, feature flags
+python3 scripts/setup-workstation.py --verify
+```
+
+`scripts/setup-workstation.py` writes `ansible/inventory/host_vars/<inventory_host>.yml` and adds a local-connection entry to `ansible/inventory/hosts.yml` (it never touches the existing `desktop`/`laptop` entries and never runs provisioning by itself). Then follow the validate → preview → apply → validate → idempotency flow above with your own `--limit <inventory_host>`. Manual enrollment is still required and cannot be automated: Proton sign-in, Syncthing pairing as a **new** device, and pre-creating `/my-files/Workstation-Backups/<hostname>` in Proton Drive before enabling the backup timer — see [WORKSTATION-INSTALL.md](docs/WORKSTATION-INSTALL.md).
+
 **Ubuntu 26.04 sudo note:** If Ansible privilege escalation fails unexpectedly, inspect the configured `sudo` alternative (`sudo-rs` versus traditional sudo) instead of weakening permissions.
 
 ## Working across two machines

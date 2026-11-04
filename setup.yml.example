@@ -1,0 +1,32 @@
+---
+# Template for using this repository on your own workstation.
+#
+#   cp setup.yml.example setup.local.yml     # setup.local.yml is gitignored
+#   $EDITOR setup.local.yml                 # fill in the values below
+#   python3 scripts/setup-workstation.py    # generates hosts.yml entry + host_vars/<host>.yml
+#   python3 scripts/setup-workstation.py --verify   # read-only syntax + inventory checks
+#
+# Then provision from your logged-in desktop session (see README quick start),
+# replacing <inventory_host> with the name you chose below:
+#   cd ansible
+#   ansible-playbook playbooks/workstation.yml -K --limit <inventory_host>
+
+inventory_host: myworkstation   # inventory name used with --limit (letters, digits, _ and -)
+hostname: my-machine            # actual hostname of this machine; the backup destination uses it
+device_class: desktop           # desktop | laptop
+
+# Feature flags (same names as the role defaults):
+syncthing_enabled: true
+backup_enabled: true
+backup_timer_enabled: false     # enable only after Proton sign-in AND a tested restore
+
+# Optional: any extra workstation_* variables are copied into your generated
+# host_vars file, e.g. a different backup selection:
+# workstation_backup_sources:
+#   - "~/Documents"
+#   - "~/Sync"
+
+# Manual steps that no script can do for you (see docs/WORKSTATION-INSTALL.md):
+# sign in to Proton apps, pair Syncthing as a NEW device, and pre-create
+# /my-files/Workstation-Backups/<hostname> in Proton Drive before enabling
+# the backup timer. Never put credentials in this file or in Git.
