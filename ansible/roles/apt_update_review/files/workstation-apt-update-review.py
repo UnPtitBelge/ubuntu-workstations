@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Read-only version review for selected Docker and Proton APT packages."""
+import argparse
+import re
+import shlex
+import subprocess
+import sys
+
+GROUPS = {
+    'docker': [
+        'docker-ce', 'docker-ce-cli', 'containerd.io',
+        'docker-buildx-plugin', 'docker-compose-plugin',
+        'docker-ce-rootless-extras',
+    ],
+    'proton': ['proton-vpn-gnome-desktop'],
+}
+
+
+def run(argv, timeout=90):
+    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def installed(pkg):
+    result = run(['dpkg-query', '-W', '-f=${Status}\t${Version}', pkg])
+    prefix = 'install ok installed\t'
+    return result.stdout[len(prefix):].strip() if result.returncode == 0 and result.stdout.startswith(prefix) else None
+
+
+def candidate(pkg):
+    result = run(['apt-cache', 'policy', pkg])
+    if result.returncode:
+        return None
+    match = re.search(r'^\s*Candidate:\s*(\S+)', result.stdout, re.MULTILINE)
+    return match.group(1) if match and match.group(1) != '(none)' else None
+
+
+def is_newer(available, current):
+    return run(['dpkg', '--compare-versions', available, 'gt', current]).returncode == 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--group', choices=GROUPS, required=True)
+    parser.add_argument('--plan', action='store_true', help='Simulate proposed upgrades; never install packages')
+    args = parser.parse_args()
+
+    print(f'CONTROLLED APT UPDATE REVIEW — {args.group.upper()}')
+    print('Mode: READ ONLY (no changes made)\n')
+    upgrades = {}
+    errors = False
+    for package in GROUPS[args.group]:
+        current = installed(package)
+        if current is None:
+            print(f'[SKIP] {package}: not installed')
+            continue
+        available = candidate(package)
+        if available is None:
+            print(f'[WARN] {package}: no APT candidate available')
+            errors = True
+        elif is_newer(available, current):
+            upgrades[package] = available
+            print(f'[AVAILABLE] {package}: {current} -> {available}')
+        else:
+            print(f'[OK] {package}: installed={current}; candidate={available}')
+
+    if not args.plan:
+        return 2 if errors else 0
+    if not upgrades:
+        print('\nNo updates to simulate.')
+        return 2 if errors else 0
+
+    packages = [f'{package}={version}' for package, version in upgrades.items()]
+    command = ['apt-get', '--no-remove', '--only-upgrade', 'install', *packages]
+    print('\n=== APT SIMULATION ===')
+    simulation = run(['apt-get', '-s', *command[1:]])
+    print(simulation.stdout, end='')
+    if simulation.stderr:
+        print(simulation.stderr, file=sys.stderr, end='')
+    if simulation.returncode != 0:
+        print('[BLOCKED] APT simulation failed; do not upgrade.')
+        return 2
+    installs = set(re.findall(r'^Inst\s+(\S+)', simulation.stdout, flags=re.MULTILINE))
+    removals = set(re.findall(r'^(?:Remv|Purg)\s+(\S+)', simulation.stdout, flags=re.MULTILINE))
+    extras = installs - set(upgrades)
+    if extras or removals:
+        print('\n[REVIEW REQUIRED] Additional package operations:')
+        for package in sorted(extras):
+            print(f'  Additional install/upgrade: {package}')
+        for package in sorted(removals):
+            print(f'  Removal: {package}')
+    else:
+        print('\n[OK] Simulation shows no extra package operations.')
+    print('\n=== OPTIONAL MANUAL APPROVAL ===')
+    print('Check affected workloads, network connectivity, and exact package versions first.')
+    print('The following command was NOT executed:')
+    print(shlex.join(['sudo', *command]))
+    return 2 if errors else 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f'[ERROR] {error}', file=sys.stderr)
+        sys.exit(2)
