@@ -11,7 +11,7 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 | `desktop` | `Omnissiah-desktop` | Primary development and configuration machine |
 | `laptop` | `Omnissiah-pocket` | Secondary workstation; receives reviewed changes from Git |
 
-> **Start here:** [Command cheatsheet](docs/WORKSTATION-CHEATSHEET.md) · [Routine maintenance checklist](docs/WORKSTATION-ROUTINE-CHECKLIST.md) · [Installation](docs/WORKSTATION-INSTALL.md) · [Recovery](docs/WORKSTATION-RECOVERY.md)
+> **Start here:** [Command cheatsheet](docs/WORKSTATION-CHEATSHEET.md) · [Routine maintenance checklist](docs/WORKSTATION-ROUTINE-CHECKLIST.md) · [Deployment & portability](docs/DEPLOY.md) · [Provider migration](docs/MIGRATE.md) · [Roadmap / TODO](docs/TODO.md) · [Installation](docs/WORKSTATION-INSTALL.md) · [Recovery](docs/WORKSTATION-RECOVERY.md)
 
 ## What Ansible manages
 
@@ -76,6 +76,9 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 ├── docs/
 │   ├── WORKSTATION-CHEATSHEET.md
 │   ├── WORKSTATION-ROUTINE-CHECKLIST.md
+│   ├── DEPLOY.md                     # New hosts and provider architecture
+│   ├── MIGRATE.md                    # Provider cutover and rollback
+│   ├── TODO.md                       # Prioritized implementation gaps
 │   ├── WORKSTATION-INSTALL.md
 │   ├── WORKSTATION-RECOVERY.md
 │   ├── REPOSITORY-AUDIT.md
@@ -84,6 +87,14 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 ```
 
 The tree above describes the intended v1.2.0 layout; optional assets and documentation may vary. Shared defaults belong in role defaults and `inventory/group_vars/all.yml`; host-specific settings belong in `inventory/host_vars/`. Don't copy device IDs, application sessions or credentials between machines.
+
+## Portability roadmap
+
+The existing v1.2.0 configuration is **tested on two named Ubuntu workstations**; it is not yet a universal installer or fully provider-independent. In particular, Proton backup implementation and monitoring are provider-coupled. The next architectural goal is to separate **capabilities** (backup, sync, VPN, mail, passwords) from **providers** (such as Proton Drive or another backup service), while keeping per-host secrets and data migration explicit.
+
+- **[DEPLOY.md](docs/DEPLOY.md):** deploy an existing host today; design and acceptance criteria for new generic workstations.
+- **[MIGRATE.md](docs/MIGRATE.md):** inventory, export/import, verification, cutover and rollback when replacing any provider or tool.
+- **[TODO.md](docs/TODO.md):** prioritized, testable work remaining; proposed features are not presented as implemented.
 
 ## Quick start
 
