@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install check dependencies
-        run: pip install ansible-core PyYAML
+        run: pip install -r requirements.txt
       - name: Repository audit (read-only)
         run: python3 scripts/audit-workstation.py .
       - name: Compile all Python files

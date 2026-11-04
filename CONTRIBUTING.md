@@ -50,6 +50,12 @@ improvements, portability patches and **new providers** are welcome.
    on, and the test results. Do not force-push to `main`; releases use
    annotated tags created by the maintainer after validation.
 
+**Dependabot PRs** (Actions versions in `.github/workflows/`, Python deps in
+`requirements.txt`, via `.github/dependabot.yml`) are welcome but review them
+like any change: check the changelog, confirm CI stays green, and merge. They
+are proposals, not automatic upgrades — nothing is installed on the
+workstations without an approved commit.
+
 ## Adding a provider
 
 Providers live in `ansible/roles/providers/`, vendor-namespaced, so the

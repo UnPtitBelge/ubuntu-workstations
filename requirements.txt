@@ -1,0 +1,6 @@
+# Python dependencies for CI checks and repository scripts only (this repo is
+# not a Python package). Tracked by Dependabot (.github/dependabot.yml) and
+# installed by the CI workflow; the provisioned workstations get ansible-core
+# from apt, not from here.
+ansible-core
+PyYAML
