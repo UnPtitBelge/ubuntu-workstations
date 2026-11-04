@@ -34,11 +34,18 @@ The view rereads evidence every 30 seconds while open (configurable with
 | Key / option | Effect |
 | --- | --- |
 | Up/Down or j/k | Select a job; scroll in a report/log view |
-| Enter / `--detail JOB` | Display a saved report and evidence details |
+| Space or Enter / `--detail JOB` | Display a saved report and evidence details |
 | l / `--logs JOB` | Read the selected service's last 40 local journal lines |
 | r | Reread existing files and unit properties; never refresh the underlying job |
 | ? / Escape / q | Help / overview / quit |
 | `--status` / `--json` | One snapshot as text / schema-versioned JSON, excluding raw reports and logs |
+
+The interface uses Textual with a styled, scrollable job table, state counts,
+selected-job preview and full report/journal views. Mouse selection, wheel
+scrolling and clickable footer shortcuts are supported. Tab moves focus;
+PageUp/PageDown and Home/End navigate the focused table or document. Textual
+styles and key bindings live in `create_app()` in the console source. Reports
+are rendered as literal text, including any markup-like content.
 
 Job IDs: `health`, `drift`, `backup`, `restore`, `summary`, `updates`,
 `post-update`, `alerts`, `update-alerts`, `sync`, `apt-lists`, `apt-upgrades`.

@@ -1,4 +1,5 @@
 ---
-# No daemon, timer, package installation or third-party Python dependency.
+# No daemon or timer; Textual is supplied by Ubuntu rather than global pip.
 workstation_console_enabled: true
+workstation_console_install_dependencies: true
 workstation_console_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/workstation"

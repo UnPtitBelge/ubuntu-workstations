@@ -40,8 +40,8 @@ If the console is installed, start here:
 workstation
 ```
 
-Use Up/Down (or j/k) to select, Enter for the saved report, `l` for the selected
-journal, `r` to reread existing evidence, `?` for help and `q` to quit. Rereading
+Use Up/Down (or j/k) to select, Space for the saved report (Enter also works),
+`l` for the selected journal, `r` to reread existing evidence, `?` for help and `q` to quit. Rereading
 never runs a check/upload/restore. For a single noninteractive snapshot use
 `workstation --status` or `workstation --json`. Logs and full reports are shown
 only on request and may contain private paths.

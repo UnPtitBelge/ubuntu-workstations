@@ -185,27 +185,29 @@ and apply on the same host.
 
 The `workstation_console` role is part of normal provisioning. To install just
 the TUI, its local intent snapshot and Fish completion, use this scoped playbook
-on the intended machine. It does not install packages, start jobs, change cloud
-data or invoke any other workstation role. Python's standard-library curses
-support must be available for the TUI; text/JSON modes do not require curses.
+on the intended machine. It installs Ubuntu’s `python3-textual` package for the
+interactive UI, plus local console files. It does not start jobs, change cloud
+data or invoke other workstation roles. Text/JSON modes use only the Python
+standard library. Set `workstation_console_install_dependencies: false` only
+when Textual is already supplied to the console’s Python interpreter.
 
 ```fish
 cd ~/Projects/ubuntu-workstations/ansible
 set target desktop
 # On the laptop use: set target laptop
-env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --check --diff --limit $target
+ansible-playbook playbooks/console.yml -K --check --diff --limit $target
 ```
 
 Inspect the preview, then deliberately apply and repeat for convergence:
 
 ```fish
-env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --limit $target
-env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --limit $target
+ansible-playbook playbooks/console.yml -K --limit $target
+ansible-playbook playbooks/console.yml -K --limit $target
 ~/.local/bin/workstation --status
 ```
 
-`ANSIBLE_BECOME_ASK_PASS=false` suppresses the repository's global escalation
-prompt for this unprivileged playbook; it does not grant sudo permissions.
+The package task uses sudo; console files are installed as the ordinary user.
+Review the package change in check mode before approving deployment.
 The scoped playbook requires exactly one local inventory target. The command
 is installed at `~/.local/bin/workstation`; Fish completion is installed under
 `~/.config/fish/completions/`. No shell restart is required when that bin

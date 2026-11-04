@@ -9,8 +9,9 @@ it is deployed or has passed a real cloud/restore test.
 
 **Implemented in the repository: `workstation`, a read-only TUI plus status/JSON
 CLI.** It reuses reports and local systemd evidence, with Ansible installation
-and Fish completion. Management actions remain separate future work; no new
-scheduler is introduced.
+and Fish completion. The Textual UI supports Space to open reports, mouse
+navigation and scrollable evidence views. Management actions remain separate
+future work; no new scheduler is introduced.
 
 - [x] Show local host, selected profile/provider intent and installed jobs together, with an explicit distinction between desired and observed state.
 - [x] Summarize health, drift, backup, restore evidence, update discovery and post-update validation with their timestamps and evidence paths.

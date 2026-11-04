@@ -6,7 +6,7 @@ Run the same gate locally and in CI, from the repository root:
 python3 scripts/maintenance-check.py
 ```
 
-Requires Ansible and PyYAML (listed in `requirements.txt`). The gate compiles
+Requires Ansible, PyYAML and Textual (listed in `requirements.txt`). The gate compiles
 Python, audits configuration, runs tests, syntax-checks every playbook and
 parses inventory. It never runs the workstation provisioning playbook.
 
@@ -37,7 +37,9 @@ The console tests use synthetic local reports and an injected read-only systemd
 runner. They cover freshness, malformed/missing data, provider/host/dataset
 attribution, disabled intent versus observed schedules, legacy restore evidence,
 missing baselines/bus access, terminal-control sanitization, file limits and
-noninteractive errors. A pseudo-terminal smoke test exercises real curses
-navigation/resize/exit with synthetic evidence. An isolated role installation
-checks valid private configuration and second-pass convergence in a temporary
-home. No console test reads live journals or contacts a provider.
+noninteractive errors. Textual headless tests exercise Space/Enter navigation,
+focus, resizing, literal report rendering and delayed journal completion. A
+pseudo-terminal smoke test exercises real terminal navigation/resize/exit with
+synthetic evidence. An isolated role installation checks valid private
+configuration and second-pass convergence in a temporary home (package
+installation is skipped). No console test reads live journals or contacts a provider.

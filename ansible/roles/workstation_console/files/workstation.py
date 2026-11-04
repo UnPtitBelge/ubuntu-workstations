@@ -396,148 +396,215 @@ def text_status(snapshot):
     return '\n'.join(lines)
 
 
-def draw_dashboard(screen, snapshot, selected, mode, content, scroll, busy):
-    """Render only; safe for small/resized terminals and independently testable."""
-    import curses
-    height, width = screen.getmaxyx()
-    screen.erase()
-    def color(number):
-        try:
-            return curses.color_pair(number)
-        except curses.error:
-            return 0
-    def put(y, x, value, attr=0):
-        if 0 <= y < height and 0 <= x < width - 1:
-            try:
-                screen.addnstr(y, x, clean(value).replace('\t', '    '), max(0, width - x - 1), attr)
-            except curses.error:
-                pass
-    if height < 18 or width < 72:
-        put(0, 0, 'Workstation — resize to at least 72 columns x 18 rows. q quits.')
-        screen.refresh()
-        return
-    put(0, 2, 'WORKSTATION  /  local operations', curses.A_BOLD | color(1))
-    put(1, 2, f'{snapshot["host"]}  •  {snapshot["profile"]}  •  {snapshot["overall"]}' if snapshot else 'Reading local evidence…')
-    put(2, 2, 'READ ONLY  |  Deployed intent + observed jobs  |  No cloud requests or repairs', curses.A_DIM)
-    if snapshot and snapshot['config_warning']:
-        put(3, 2, snapshot['config_warning'], color(3))
-    elif snapshot:
-        put(3, 2, 'Selected: ' + '  '.join(f'{key}={value}' for key, value in snapshot['providers'].items()), curses.A_DIM)
-    if not snapshot:
-        put(5, 2, 'Loading… q remains available.')
-    elif mode == 'overview':
-        rows = snapshot['jobs']
-        visible = max(1, min(len(rows), (height - 9) // 2))
-        start = max(0, min(selected - visible + 1, len(rows) - visible))
-        put(4, 2, '  JOB                                 EVIDENCE   STATE      SERVICE', curses.A_BOLD)
-        for offset, row in enumerate(rows[start:start + visible]):
-            index = start + offset
-            state_color = {'HEALTHY': 2, 'FAILED': 4, 'STALE': 3, 'UNKNOWN': 3, 'DISABLED': 5}[row['state']]
-            attr = curses.A_REVERSE if index == selected else color(state_color)
-            put(5 + offset, 2, f'{">" if index == selected else " "} {row["label"]:34.34} {age_label(row["age_hours"]):>7}   {row["state"]:9}  {row["activity"]}', attr)
-        row = rows[selected]
-        y = 6 + visible
-        put(y, 2, row['label'], curses.A_BOLD)
-        summary = [*row['reasons'][:2], 'Last trigger: ' + row['last_trigger'],
-                   'Next run: ' + row['next_run'], 'Activity: ' + row['activity'],
-                   'Enter for saved report; l for the local service journal.']
-        for index, line in enumerate(summary):
-            if y + index + 1 >= height - 3:
-                break
-            put(y + index + 1, 2, line)
-    else:
-        put(4, 2, mode.upper() + '  /  ' + (snapshot['jobs'][selected]['label'] if mode != 'help' else 'keys and effects'), curses.A_BOLD)
-        lines = content.splitlines()
-        for index, line in enumerate(lines[scroll:scroll + height - 8]):
-            put(6 + index, 2, line)
-    put(height - 2, 2, '↑↓/jk select  Enter report  l logs  r reread  ? help  Esc overview  q quit', curses.A_BOLD)
-    put(height - 1, 2, 'Reading local evidence…' if busy else 'r only rereads evidence; it does not run monitoring jobs.', curses.A_DIM)
-    screen.refresh()
+def create_app(collector, interval):
+    """Lazy UI imports keep the status/JSON CLI usable without Textual."""
+    from textual.app import App, ComposeResult
+    from textual.binding import Binding
+    from textual.containers import VerticalScroll
+    from textual.widgets import DataTable, Footer, Header, Static
+    from rich.text import Text
+
+    class ConsoleApp(App):
+        TITLE = 'Workstation'
+        ENABLE_COMMAND_PALETTE = False
+        CSS = '''
+        Screen { background: $surface; }
+        #identity { height: auto; padding: 1 2; background: $panel; }
+        #summary { height: auto; padding: 0 2; color: $accent; }
+        #jobs { height: 1fr; margin: 1 2 0 2; border: round $primary; }
+        #preview { height: 6; padding: 0 2; border-top: solid $primary; }
+        #reader { height: 1fr; margin: 1 2; border: round $primary; display: none; }
+        #document { height: auto; padding: 1 2; }
+        #notice { height: auto; padding: 0 2; color: $text-muted; }
+        .reading #jobs, .reading #preview { display: none; }
+        .reading #reader { display: block; }
+        .compact #identity { height: 1; padding: 0 1; }
+        .compact #summary { height: 1; padding: 0 1; }
+        .compact #jobs, .compact #reader { margin: 0; }
+        .compact #preview { height: 3; padding: 0 1; }
+        '''
+        BINDINGS = [
+            Binding('space', 'open_report', 'Open report', priority=True),
+            Binding('enter', 'open_report', 'Open report', show=False, priority=True),
+            Binding('escape', 'overview', 'Back', priority=True),
+            Binding('l', 'logs', 'Journal'), Binding('r', 'reread', 'Reread'),
+            Binding('?', 'help', 'Help'), Binding('q', 'quit', 'Quit', priority=True),
+            Binding('j', 'move(1)', show=False), Binding('k', 'move(-1)', show=False),
+        ]
+
+        def __init__(self):
+            super().__init__()
+            self.snapshot = None
+            self.mode = 'overview'
+            self.busy = False
+            self.request = 0
+
+        def compose(self) -> ComposeResult:
+            yield Header()
+            yield Static('Reading local evidence…', id='identity', markup=False)
+            yield Static('', id='summary', markup=False)
+            yield DataTable(id='jobs', cursor_type='row', zebra_stripes=True)
+            yield Static('Select a job, then press Space to open its report.', id='preview', markup=False)
+            with VerticalScroll(id='reader', can_focus=True):
+                yield Static('', id='document', markup=False)
+            yield Static('READ ONLY • Deployed intent • No cloud requests or repairs', id='notice', markup=False)
+            yield Footer()
+
+        def on_mount(self):
+            table = self.query_one(DataTable)
+            table.add_columns('Job', 'State', 'Evidence age', 'Service')
+            table.focus()
+            self.executor = ThreadPoolExecutor(max_workers=1)
+            self.pending = None
+            self.last_read = time.monotonic()
+            self.set_interval(0.1, self.poll)
+            self.action_reread()
+
+        def on_unmount(self):
+            self.executor.shutdown(wait=False, cancel_futures=True)
+
+        def on_resize(self, event):
+            self.screen.set_class(event.size.height < 24 or event.size.width < 80, 'compact')
+
+        def selected(self):
+            if self.snapshot and self.snapshot['jobs']:
+                index = min(self.query_one(DataTable).cursor_row, len(self.snapshot['jobs']) - 1)
+                return self.snapshot['jobs'][index]
+            return None
+
+        def poll(self):
+            if self.pending and self.pending[0].done():
+                future, kind, request = self.pending
+                self.pending, self.busy = None, False
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    self.query_one('#notice', Static).update(f'Cannot read evidence ({type(exc).__name__}); press r to retry.')
+                    self.last_read = time.monotonic()
+                    return
+                self.query_one('#notice', Static).update('READ ONLY • r rereads evidence; it never runs monitoring jobs.')
+                if kind == 'snapshot':
+                    self.apply_snapshot(result)
+                    self.last_read = time.monotonic()
+                elif self.mode == 'logs' and request == self.request:
+                    self.query_one('#document', Static).update(clean(result))
+            if not self.busy and time.monotonic() - self.last_read >= interval:
+                self.action_reread()
+
+        def apply_snapshot(self, snapshot):
+            previous = self.selected()
+            self.snapshot = snapshot
+            table = self.query_one(DataTable)
+            table.clear()
+            colors = {'HEALTHY': 'green', 'FAILED': 'red', 'STALE': 'yellow', 'UNKNOWN': 'yellow', 'DISABLED': 'dim'}
+            for row in snapshot['jobs']:
+                table.add_row(Text(clean(row['label'])), Text(row['state'], style=colors[row['state']]),
+                              Text(age_label(row['age_hours'])), Text(clean(row['activity'])), key=row['id'])
+            if previous:
+                index = next((i for i, row in enumerate(snapshot['jobs']) if row['id'] == previous['id']), 0)
+                table.move_cursor(row=index)
+            identity = f"{snapshot['host']}  /  {snapshot['profile']}  /  {snapshot['overall']}\n"
+            identity += '  '.join(f'{k}={v}' for k, v in snapshot['providers'].items())
+            self.query_one('#identity', Static).update(clean(identity))
+            counts = '   '.join(f'{state}: {sum(row["state"] == state for row in snapshot["jobs"])}'
+                                for state in ('FAILED', 'STALE', 'UNKNOWN', 'HEALTHY', 'DISABLED'))
+            self.query_one('#summary', Static).update(counts + '\nObserved: ' + clean(snapshot['observed_at'])
+                                                    + ('\n' + clean(snapshot['config_warning']) if snapshot['config_warning'] else ''))
+            self.update_preview()
+            if self.mode == 'report' and self.selected():
+                row = self.selected()
+                self.query_one('#document', Static).update(clean(
+                    details(row, collector.reports.get(row['id'], 'No saved report.'))))
+
+        def update_preview(self):
+            row = self.selected()
+            if row:
+                self.query_one('#preview', Static).update(clean('\n'.join([
+                    row['label'] + ' • ' + row['state'], '; '.join(row['reasons']),
+                    'Last trigger: ' + row['last_trigger'], 'Next run: ' + row['next_run']])))
+
+        def on_data_table_row_highlighted(self, event):
+            self.update_preview()
+
+        def on_data_table_row_selected(self, event):
+            self.action_open_report()
+
+        def show_document(self, mode, title, content):
+            self.request += 1
+            self.mode = mode
+            self.screen.add_class('reading')
+            reader = self.query_one('#reader', VerticalScroll)
+            reader.border_title = clean(title)
+            self.query_one('#document', Static).update(clean(content))
+            reader.scroll_home(animate=False)
+            reader.focus()
+
+        def action_open_report(self):
+            row = self.selected()
+            if row:
+                self.show_document('report', row['label'] + ' / saved report',
+                                   details(row, collector.reports.get(row['id'], 'No saved report.')))
+
+        def action_overview(self):
+            self.request += 1
+            self.mode = 'overview'
+            self.screen.remove_class('reading')
+            self.query_one(DataTable).focus()
+
+        def action_logs(self):
+            row = self.selected()
+            if row and not self.busy:
+                self.show_document('logs', row['label'] + ' / local journal', 'Reading selected local journal…')
+                self.busy = True
+                self.pending = (self.executor.submit(collector.logs, row), 'logs', self.request)
+
+        def action_reread(self):
+            if not self.busy:
+                self.busy = True
+                self.query_one('#notice', Static).update('Reading local evidence…')
+                self.pending = (self.executor.submit(collector.snapshot), 'snapshot', self.request)
+
+        def action_help(self):
+            self.show_document('help', 'Keys and evidence', HELP)
+
+        def action_move(self, change):
+            if self.mode == 'overview':
+                table = self.query_one(DataTable)
+                if table.row_count:
+                    table.move_cursor(row=(table.cursor_row + change) % table.row_count)
+            else:
+                reader = self.query_one('#reader', VerticalScroll)
+                reader.scroll_relative(y=change, animate=False)
+
+    return ConsoleApp()
 
 
 HELP = '''Navigation
-  Up/Down or j/k: select a job; in report/log views, scroll.
-  Enter: open existing report and status evidence.
+  Space or Enter: open the selected saved report.
+  Up/Down or j/k: select a job; scroll in a report/journal.
+  Mouse: select jobs, scroll, or click footer actions. Tab: change focus.
+  PageUp/PageDown, Home/End: navigate long tables and documents.
   l: read the selected service's last 40 journal lines (may contain private data).
   r: reread files and systemd properties; never runs a check/upload/restore.
-  Escape: return to overview. q: quit. Terminal resize is supported.
+  Escape: return to overview. q: quit. ?: help.
 
 Evidence
-  HEALTHY: the available local checks passed; read the scope/limitations.
+  HEALTHY: available local checks passed; read their scope/limitations.
   FAILED: a report, service outcome or desired/observed schedule disagrees.
-  STALE: available evidence is older than its configured freshness threshold.
+  STALE: evidence is older than its configured freshness threshold.
   UNKNOWN: evidence, attribution, baseline/configuration or user bus is unavailable.
-  DISABLED: not selected/scheduled in deployed intent and no conflicting schedule observed.
+  DISABLED: not selected/scheduled and no conflicting schedule observed.
 
-Reports and logs are displayed locally only when requested; no uploads/exports.
+Reports and logs appear locally only on request; no uploads/exports.
 Inactive oneshot services can be successful. A schedule alone is not execution.
 Legacy restore metadata without host/dataset attribution stays UNKNOWN.
-This interface cannot prove all cloud files are recoverable or that a notification arrived.
+This interface cannot prove recoverability or notification delivery.
 Configuration comes from the last console deployment, not live Git inventory.
 '''
 
 
 def tui(collector, interval):
-    import curses
-    def app(screen):
-        try:
-            curses.curs_set(0)
-        except curses.error:
-            pass
-        if curses.has_colors():
-            curses.start_color()
-            try:
-                curses.use_default_colors()
-                background = -1
-            except curses.error:
-                background = curses.COLOR_BLACK
-            for index, color in enumerate((curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_WHITE), 1):
-                curses.init_pair(index, color, background)
-        screen.keypad(True)
-        screen.timeout(100)
-        snapshot, selected, mode, content, scroll = None, 0, 'overview', '', 0
-        with ThreadPoolExecutor(max_workers=1) as worker:
-            future = worker.submit(collector.snapshot)
-            log_future = None
-            last_read = time.monotonic()
-            while True:
-                if future is not None and future.done():
-                    snapshot = future.result()
-                    selected = min(selected, len(snapshot['jobs']) - 1)
-                    future = None
-                    last_read = time.monotonic()
-                    if mode == 'report':
-                        row = snapshot['jobs'][selected]
-                        content = details(row, collector.reports.get(row['id'], 'No report available for this item.'))
-                if log_future is not None and log_future.done():
-                    content = log_future.result()
-                    log_future = None
-                if future is None and log_future is None and time.monotonic() - last_read >= interval:
-                    future = worker.submit(collector.snapshot)
-                draw_dashboard(screen, snapshot, selected, mode, content, scroll, future is not None or log_future is not None)
-                key = screen.getch()
-                if key in (ord('q'), ord('Q')):
-                    break
-                if key == ord('?'):
-                    mode, content, scroll = 'help', HELP, 0
-                elif key == 27:
-                    mode, scroll = 'overview', 0
-                elif key in (ord('r'), ord('R')) and future is None and log_future is None:
-                    future = worker.submit(collector.snapshot)
-                elif snapshot:
-                    if key in (curses.KEY_UP, ord('k'), curses.KEY_DOWN, ord('j')):
-                        change = -1 if key in (curses.KEY_UP, ord('k')) else 1
-                        if mode == 'overview':
-                            selected = (selected + change) % len(snapshot['jobs'])
-                        else:
-                            scroll = max(0, min(scroll + change, max(0, len(content.splitlines()) - 1)))
-                    elif key in (10, 13, curses.KEY_ENTER):
-                        row = snapshot['jobs'][selected]
-                        mode, content, scroll = 'report', details(row, collector.reports.get(row['id'], 'No report available for this item.')), 0
-                    elif key in (ord('l'), ord('L')) and log_future is None and future is None:
-                        mode, content, scroll = 'logs', 'Reading selected local journal…', 0
-                        log_future = worker.submit(collector.logs, snapshot['jobs'][selected])
-    curses.wrapper(app)
+    create_app(collector, interval).run()
 
 
 def main(argv=None):
@@ -569,6 +636,10 @@ def main(argv=None):
         parser.exit(2, 'An interactive terminal is required. Use --status or --json for noninteractive output.\n')
     try:
         tui(collector, args.interval)
+    except ModuleNotFoundError as exc:
+        if exc.name == 'textual':
+            parser.exit(2, 'Textual is required for the TUI; install python3-textual through the console role. Use --status or --json meanwhile.\n')
+        raise
     except KeyboardInterrupt:
         return 0
     except Exception as exc:

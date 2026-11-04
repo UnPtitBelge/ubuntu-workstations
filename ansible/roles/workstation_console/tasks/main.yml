@@ -1,4 +1,13 @@
 ---
+- name: Install Textual for the interactive workstation console
+  become: true
+  ansible.builtin.apt:
+    name: python3-textual
+    state: present
+  when:
+    - workstation_console_enabled | bool
+    - workstation_console_install_dependencies | bool
+
 - name: Install local workstation monitoring console
   become: false
   when: workstation_console_enabled | bool

@@ -300,36 +300,99 @@ class ConsoleTests(unittest.TestCase):
                 if ready:
                     output += os.read(master, 65536)
             self.assertIn(b'System health', output)
-            for key in (b'\n', b'\x1b', b'l', b'?', b'\x1b', b'r'):
+            for key in (b' ', b'\n', b'\x1b', b'l', b'?', b'\x1b', b'r'):
                 os.write(master, key)
                 select.select([master], [], [], 0.05)
                 if select.select([master], [], [], 0.05)[0]:
                     output += os.read(master, 65536)
             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 12, 50, 0, 0))
             os.write(master, b'q')
-            self.assertEqual(process.wait(timeout=8), 0, output.decode(errors='replace'))
+            # Keep draining output while Textual restores the terminal on exit.
+            deadline = time.monotonic() + 8
+            while process.poll() is None and time.monotonic() < deadline:
+                if select.select([master], [], [], 0.1)[0]:
+                    try:
+                        output += os.read(master, 65536)
+                    except OSError:
+                        break
+            self.assertEqual(process.wait(timeout=1), 0, output.decode(errors='replace'))
         finally:
             if process.poll() is None:
                 process.kill()
                 process.wait()
             os.close(master)
 
-    def test_renderer_handles_small_terminal_long_text_and_scrolling(self):
-        class Screen:
-            def __init__(self, height, width):
-                self.size, self.lines = (height, width), []
-            def getmaxyx(self): return self.size
-            def erase(self): self.lines.clear()
-            def addnstr(self, y, x, text, count, attr):
-                self.lines.append(text[:count])
-                assert 0 <= y < self.size[0] and 0 <= x < self.size[1]
-            def refresh(self): pass
-        snapshot = self.collector.snapshot()
-        for height, width in ((8, 25), (24, 80), (40, 140)):
-            for mode in ('overview', 'report', 'logs', 'help'):
-                screen = Screen(height, width)
-                console.draw_dashboard(screen, snapshot, 11, mode, 'long content\n' * 100, 20, False)
-                self.assertTrue(screen.lines)
+    def test_textual_navigation_resize_and_literal_report(self):
+        import asyncio
+        from textual.widgets import DataTable, Static
+
+        async def exercise():
+            app = console.create_app(self.collector, 30)
+            async with app.run_test(size=(110, 30)) as pilot:
+                for _ in range(50):
+                    if app.snapshot:
+                        break
+                    await pilot.pause(0.05)
+                self.assertIsNotNone(app.snapshot)
+                table = app.query_one(DataTable)
+                await pilot.press('j')
+                self.assertEqual(table.cursor_row, 1)
+                selected_id = app.selected()['id']
+                self.collector.reports[selected_id] = '[bold]literal report[/bold]'
+                await pilot.press('space')
+                self.assertEqual(app.mode, 'report')
+                self.assertIn('[bold]literal report[/bold]', str(app.query_one('#document', Static).render()))
+                await pilot.press('escape')
+                self.assertEqual(app.mode, 'overview')
+                self.assertEqual(app.selected()['id'], selected_id)
+                await pilot.press('enter')
+                self.assertEqual(app.mode, 'report')
+                await pilot.press('escape', 'l')
+                await pilot.pause(0.3)
+                self.assertEqual(app.mode, 'logs')
+                self.assertIn('Example log', str(app.query_one('#document', Static).render()))
+                await pilot.press('?')
+                self.assertEqual(app.mode, 'help')
+                await pilot.press('escape', 'r')
+                await pilot.pause(0.3)
+                self.assertEqual(app.selected()['id'], selected_id)
+                for size in ((50, 12), (80, 24), (140, 40)):
+                    await pilot.resize_terminal(*size)
+                    await pilot.press('space', 'j', 'pagedown', 'escape')
+                    self.assertEqual(app.mode, 'overview')
+                    self.assertGreater(table.size.height, 0)
+                await pilot.press('q')
+        asyncio.run(exercise())
+
+    def test_delayed_journal_does_not_replace_help(self):
+        import asyncio
+        import threading
+        from textual.widgets import Static
+        started, release = threading.Event(), threading.Event()
+        def delayed_logs(row):
+            started.set()
+            release.wait(3)
+            return 'late journal result'
+        self.collector.logs = delayed_logs
+
+        async def exercise():
+            app = console.create_app(self.collector, 30)
+            async with app.run_test() as pilot:
+                for _ in range(50):
+                    if app.snapshot:
+                        break
+                    await pilot.pause(0.05)
+                await pilot.press('l')
+                self.assertTrue(started.is_set())
+                await pilot.press('?')
+                release.set()
+                await pilot.pause(0.3)
+                self.assertEqual(app.mode, 'help')
+                self.assertNotIn('late journal result', str(app.query_one('#document', Static).render()))
+        try:
+            asyncio.run(exercise())
+        finally:
+            release.set()
 
 
 class ConsoleInstallationTests(unittest.TestCase):
@@ -343,6 +406,7 @@ class ConsoleInstallationTests(unittest.TestCase):
             config.write_text('[defaults]\nroles_path = ' + str(ROOT / 'ansible/roles') + '\n[privilege_escalation]\nbecome_ask_pass = False\n')
             variables = dict(ansible_facts={'env': {'HOME': str(home)}, 'hostname': 'test-host'},
                              ansible_python_interpreter=sys.executable, ansible_remote_tmp=str(root / 'remote-tmp'),
+                             workstation_console_install_dependencies=False,
                              workstation_profile='minimal', workstation_backup_dataset_id='home-selected',
                              workstation_capabilities={key: {'enabled': False} for key in ('backup', 'sync', 'vpn', 'mail', 'passwords')},
                              workstation_providers={key: 'none' for key in ('backup', 'sync', 'vpn', 'mail', 'passwords')},
