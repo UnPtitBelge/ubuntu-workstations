@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily workstation health check
+
+[Timer]
+OnCalendar={{ workstation_health_timer_calendar }}
+Persistent=true
+RandomizedDelaySec={{ workstation_health_timer_randomized_delay }}
+Unit=workstation-health.service
+
+[Install]
+WantedBy=timers.target

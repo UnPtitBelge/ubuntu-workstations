@@ -1,0 +1,4 @@
+---
+workstation_health_disk_warning_percent: 85
+workstation_health_timer_calendar: daily
+workstation_health_timer_randomized_delay: 30m

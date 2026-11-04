@@ -1,0 +1,41 @@
+---
+- name: Ensure workstation health directories exist
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ ansible_facts['user_dir'] }}/.local/bin"
+    - "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+    - "{{ ansible_facts['user_dir'] }}/.local/state/workstation-health"
+
+- name: Install read-only workstation health checker
+  become: false
+  ansible.builtin.template:
+    src: workstation-health-check.py.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.local/bin/workstation-health-check"
+    mode: '0755'
+
+- name: Install workstation health service
+  become: false
+  ansible.builtin.template:
+    src: workstation-health.service.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/workstation-health.service"
+    mode: '0644'
+
+- name: Install workstation health timer
+  become: false
+  ansible.builtin.template:
+    src: workstation-health.timer.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/workstation-health.timer"
+    mode: '0644'
+
+- name: Enable daily workstation health checks
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-health.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started

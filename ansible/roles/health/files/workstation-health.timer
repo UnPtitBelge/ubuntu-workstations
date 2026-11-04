@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily workstation health check
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=workstation-health.service
+
+[Install]
+WantedBy=timers.target

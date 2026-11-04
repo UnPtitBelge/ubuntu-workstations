@@ -1,0 +1,6 @@
+[Unit]
+Description=Read-only workstation health check
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-health-check
