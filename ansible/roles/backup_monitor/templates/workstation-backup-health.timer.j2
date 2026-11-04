@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Proton Drive backup health check
+
+[Timer]
+OnCalendar={{ workstation_backup_monitor_on_calendar }}
+RandomizedDelaySec={{ workstation_backup_monitor_randomized_delay }}
+Persistent=true
+Unit=workstation-backup-health.service
+
+[Install]
+WantedBy=timers.target

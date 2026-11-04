@@ -1,0 +1,5 @@
+---
+# Monitoring only. Does not change backup sources, destinations or schedule.
+workstation_backup_monitor_max_age_hours: 48
+workstation_backup_monitor_on_calendar: '*-*-* 08:00:00'
+workstation_backup_monitor_randomized_delay: '30m'

@@ -1,0 +1,7 @@
+[Unit]
+Description=Check Proton Drive backup status and freshness
+After=workstation-proton-backup.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-backup-health-check --max-age-hours {{ workstation_backup_monitor_max_age_hours }}
