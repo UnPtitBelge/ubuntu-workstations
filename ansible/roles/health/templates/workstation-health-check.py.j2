@@ -69,10 +69,15 @@ def main():
     except OSError as exc:
         record(False, "Home filesystem", str(exc))
 
-    check_service("docker.service")
-    check_service("syncthing.service", user=True)
-    check_timer("apt-daily.timer")
-    check_timer("apt-daily-upgrade.timer")
+{% for service in workstation_health_system_services %}
+    check_service({{ service | to_json }})
+{% endfor %}
+{% for service in workstation_health_user_services %}
+    check_service({{ service | to_json }}, user=True)
+{% endfor %}
+{% for timer in workstation_health_system_timers %}
+    check_timer({{ timer | to_json }})
+{% endfor %}
 
     reboot_needed = Path("/var/run/reboot-required").exists()
     record(not reboot_needed, "Reboot required", "yes" if reboot_needed else "no")

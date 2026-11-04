@@ -1,0 +1,14 @@
+---
+# APT package groups watched by the post-update validator. Add a group to
+# re-validate another apt-managed tool after upgrades; groups other than
+# docker/proton get a generic "package still installed" check.
+workstation_post_update_groups:
+  docker:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-compose-plugin
+    - docker-ce-rootless-extras
+  proton:
+    - proton-vpn-gnome-desktop

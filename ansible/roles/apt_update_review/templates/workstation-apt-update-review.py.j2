@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only version review for selected Docker and Proton APT packages."""
+"""Read-only version review for selected APT package groups."""
 import argparse
 import re
 import shlex
@@ -7,12 +7,9 @@ import subprocess
 import sys
 
 GROUPS = {
-    'docker': [
-        'docker-ce', 'docker-ce-cli', 'containerd.io',
-        'docker-buildx-plugin', 'docker-compose-plugin',
-        'docker-ce-rootless-extras',
-    ],
-    'proton': ['proton-vpn-gnome-desktop'],
+{% for name, packages in workstation_apt_update_review_groups.items() %}
+    {{ name | to_json }}: [{% for pkg in packages %}{{ pkg | to_json }}, {% endfor %}],
+{% endfor %}
 }
 
 
@@ -40,7 +37,7 @@ def is_newer(available, current):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--group', choices=GROUPS, required=True)
+    parser.add_argument('--group', choices=list(GROUPS), required=True)
     parser.add_argument('--plan', action='store_true', help='Simulate proposed upgrades; never install packages')
     args = parser.parse_args()
 

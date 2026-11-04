@@ -18,8 +18,8 @@
 
 - name: Install desktop alert checker
   become: false
-  ansible.builtin.copy:
-    src: workstation-desktop-alerts.py
+  ansible.builtin.template:
+    src: workstation-desktop-alerts.py.j2
     dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-desktop-alerts"
     mode: '0755'
 

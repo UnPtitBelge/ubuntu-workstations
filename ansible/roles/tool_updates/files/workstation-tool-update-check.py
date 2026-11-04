@@ -92,6 +92,26 @@ def main():
         else:
             lines.extend(result.stdout.strip().splitlines() or ['[OK] rustup check completed'])
 
+    lines.extend(['', '=== UV TOOLS ==='])
+    uv = executable('uv', '.local/bin/uv')
+    if uv is None:
+        lines.append('[UNKNOWN] uv executable not found')
+        errors += 1
+    else:
+        result = run([uv, 'tool', 'list', '--outdated'])
+        if isinstance(result, str) or result.returncode != 0:
+            detail = result if isinstance(result, str) else (result.stderr.strip() or result.stdout.strip())
+            lines.append('[UNKNOWN] Could not check uv tools: ' + str(detail)[:350])
+            errors += 1
+        else:
+            outdated = [ln.strip() for ln in result.stdout.splitlines()
+                        if ln.strip() and not ln.startswith('-')]
+            if outdated:
+                for ln in outdated:
+                    lines.append('[AVAILABLE] ' + ln)
+            else:
+                lines.append('[OK] No outdated uv tools')
+
     lines.extend(['', '=== APT PACKAGES (INFORMATION ONLY) ==='])
     apt_cache = executable('apt-cache')
     for package in args.apt_package:
@@ -111,7 +131,8 @@ def main():
         lines.append(f'[{status}] {package}: installed={installed}; candidate={candidate}')
     lines.extend(['', 'NOTE: Pinned exact mise versions may not appear as outdated.',
                   'NOTE: APT candidates are not necessarily approved for installation.',
-                  'SUMMARY: CHECK ERRORS' if errors else 'SUMMARY: REPORT GENERATED'])
+                  'SUMMARY: CHECK ERRORS' if errors else 'SUMMARY: REPORT GENERATED',
+                  'OVERALL: ' + ('ATTENTION REQUIRED' if errors else 'HEALTHY')])
 
     state_dir = Path.home() / '.local/state/workstation-tool-updates'
     state_dir.mkdir(parents=True, exist_ok=True)

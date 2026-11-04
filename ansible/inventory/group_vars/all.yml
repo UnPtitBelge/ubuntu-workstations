@@ -43,17 +43,32 @@ workstation_python_versions:
   - "3.12.13"
   - "3.13.14"
 
-workstation_python_tools:
-  - name: crewai
-    version: "1.15.20"
-
-  - name: jupyterlab
-    version: "4.6.3"
-
-  - name: mistral-vibe
-    version: "2.24.1"
+# uv-managed Python tools. Intentionally empty in the shared defaults;
+# add the tools you want per host (host_vars) or here, for example:
+#   - name: some-tool
+#     version: "1.2.3"
+workstation_python_tools: []
 
 workstation_rust_toolchain: stable
+
+# Reports consolidated by the weekly report and the GNOME desktop alert
+# checker. Register a new monitor here. `expected` is the OVERALL status that
+# counts as healthy; `max_age_hours` (optional) overrides the checker default
+# for that source (e.g. weekly reports need more than the 48h default).
+workstation_report_sources:
+  - name: System health
+    path: .local/state/workstation-health/latest.txt
+    expected: HEALTHY
+  - name: Configuration drift
+    path: .local/state/workstation-drift/latest.txt
+    expected: NO DRIFT DETECTED
+  - name: Proton Drive backup
+    path: .local/state/workstation-backup-monitor/latest.txt
+    expected: HEALTHY
+  - name: Development tool updates
+    path: .local/state/workstation-tool-updates/latest.txt
+    expected: HEALTHY
+    max_age_hours: 192
 
 # Enable automated Proton Drive backups on all workstations.
 workstation_backup_enabled: true

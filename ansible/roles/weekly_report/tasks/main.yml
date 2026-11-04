@@ -12,8 +12,8 @@
 
 - name: Install read-only consolidated report checker
   become: false
-  ansible.builtin.copy:
-    src: workstation-weekly-report.py
+  ansible.builtin.template:
+    src: workstation-weekly-report.py.j2
     dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-weekly-report"
     mode: '0755'
 

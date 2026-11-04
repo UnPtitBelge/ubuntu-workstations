@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only post-APT-update checks for Docker and Proton VPN."""
+"""Read-only post-APT-update checks for monitored package groups."""
 import argparse
 import datetime as dt
 import json
@@ -11,9 +11,11 @@ import subprocess
 import sys
 
 GROUPS = {
-    "docker": ("docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin", "docker-ce-rootless-extras"),
-    "proton": ("proton-vpn-gnome-desktop",),
+{% for name, packages in workstation_post_update_groups.items() %}
+    {{ name | to_json }}: [{% for pkg in packages %}{{ pkg | to_json }}, {% endfor %}],
+{% endfor %}
 }
+GROUP_NAMES = [{% for name in workstation_post_update_groups %}{{ name | to_json }}, {% endfor %}]
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "workstation-post-update"
 VERSIONS_FILE = STATE_DIR / "versions.json"
 REPORT_FILE = STATE_DIR / "latest.txt"
@@ -52,7 +54,7 @@ def checks(changed_groups):
     if "docker" in changed_groups:
         rc, status = run("systemctl", "is-active", "docker.service")
         record(rc == 0 and status == "active", "Docker service", status)
-        rc, output = run("docker", "info", "--format", "{{.ServerVersion}}")
+        rc, output = run("docker", "info", "--format", {% raw %}"{{.ServerVersion}}"{% endraw %})
         record(rc == 0 and bool(output), "Docker API", output)
         rc, output = run("docker", "compose", "version", "--short")
         record(rc == 0, "Docker Compose", output)
@@ -63,6 +65,14 @@ def checks(changed_groups):
         record(rc == 0 and output == "install ok installed", "Proton VPN package", output)
         # Connectivity and authenticated VPN state intentionally not assumed.
         record(True, "Proton VPN session", "Not checked (manual connection test recommended)")
+    # Generic check for any additional registered group: the packages must
+    # still be installed after the APT transaction.
+    for group in changed_groups:
+        if group in ("docker", "proton"):
+            continue
+        for pkg in GROUPS[group]:
+            rc, output = run("dpkg-query", "-W", "-f=${Status}", pkg)
+            record(rc == 0 and output == "install ok installed", f"{group}: {pkg}", output)
     return results
 
 
@@ -71,7 +81,7 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--baseline", action="store_true", help="Save currently installed package versions as the reference (no validation)")
     mode.add_argument("--watch", action="store_true", help="Validate if monitored APT package versions changed since the last successful check")
-    mode.add_argument("--check", choices=["docker", "proton", "all"], help="Force read-only validation now")
+    mode.add_argument("--check", choices=GROUP_NAMES + ["all"], help="Force read-only validation now")
     args = parser.parse_args()
     current = versions()
 

@@ -8,6 +8,11 @@ workstation_backup_timer_enabled: false
 # cloud folders or deletes anything in Proton Drive.
 workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ ansible_facts['hostname'] }}"
 
+# Dataset identifier written to the normalized backup status record
+# (~/.local/state/workstation-backup/status.json) consumed by the backup
+# monitor. Safe charset only: letters, digits, dot, underscore, dash.
+workstation_backup_dataset_id: home-selected
+
 # Complete folders are uploaded, preserving their folder names at destination.
 workstation_backup_sources:
   - "{{ ansible_facts['env']['HOME'] }}/Documents"

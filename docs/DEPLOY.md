@@ -169,3 +169,27 @@ Use stable capability names in timers and reports, with provider metadata in the
 | Support any distro/desktop | Ubuntu 26.04/GNOME focused | Support matrix and conditional roles, or explicitly limit scope |
 
 **Recommendation:** Make *Ubuntu 26.04 GNOME developer workstation* the first supported generic profile. Expand only after a third-host rehearsal passes; genericity is valuable only if it remains reliable.
+
+## 7. Registering an additional tool in backup and maintenance (implemented)
+
+Adding a tool to the managed set is configuration-only — no playbook or script edits are required:
+
+| Concern | Variable | Defined in |
+| --- | --- | --- |
+| Tool data to back up | `workstation_backup_sources` | `ansible/roles/backup/defaults/main.yml` (or `host_vars/`) |
+| Tool caches excluded from backups | `workstation_backup_excludes` | same |
+| Backup dataset label | `workstation_backup_dataset_id` | same |
+| Health-checked units | `workstation_health_system_services`, `workstation_health_user_services`, `workstation_health_system_timers` | `ansible/roles/health/defaults/main.yml` |
+| Drift-monitored config files | `workstation_drift_targets` | `ansible/roles/drift/defaults/main.yml` |
+| Reports consolidated weekly and alerted on | `workstation_report_sources` (optional per-source `max_age_hours`) | `ansible/inventory/group_vars/all.yml` |
+| APT update discovery | `workstation_tool_updates_packages` | `ansible/roles/tool_updates/defaults/main.yml` |
+| APT update review groups | `workstation_apt_update_review_groups` | `ansible/roles/apt_update_review/defaults/main.yml` |
+| Post-update validation groups | `workstation_post_update_groups` | `ansible/roles/post_update_validation/defaults/main.yml` |
+| Toolchains themselves | `dotfiles/mise/config.toml`, `workstation_python_tools`, `workstation_python_versions`, `workstation_rust_toolchain` | repo dotfiles / `group_vars/all.yml` |
+
+Behavior notes:
+
+- mise, uv and rustup tools are discovered automatically by `workstation-tool-update-check` (uv via `uv tool list --outdated`); only APT-packaged tools need the `workstation_tool_updates_packages` entry.
+- Tool binaries under `~/.local`, `~/.cargo`, `~/.rustup` and `~/.local/share/mise` are intentionally **not** backed up — they are reproducible from this repository. Back up only tool *data*.
+- Each successful backup writes a normalized record to `~/.local/state/workstation-backup/status.json` (schema in [MIGRATE.md](MIGRATE.md) §5: `schema_version`, `capability`, `provider`, `host`, `dataset_id`, `checked_at`, `result`, `verified_restore_at`). `workstation-backup-health-check` consumes that record and falls back to the legacy `last-success` stamp for older deployments, so a future backup provider can be monitored without changing the monitor. The systemd unit names remain Proton-specific until a reviewed migration renames them.
+- New APT groups in `workstation_post_update_groups` get a generic "package still installed" check after upgrades; `docker` and `proton` keep their deeper service checks.

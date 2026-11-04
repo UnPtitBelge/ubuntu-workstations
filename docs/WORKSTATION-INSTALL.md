@@ -117,8 +117,10 @@ Record the Git commit and the audit result in a personal installation log (witho
 
 The VM rehearsal tests `base`, `shell`, `bootstrap` and `languages` only. Use `ansible/playbooks/rehearsal-headless.yml` and its existing Phase 24 README. Important lessons from our first rehearsal:
 
-- Multipass often uses a Snap-private `/tmp`; transfer archives from a folder under `$HOME` instead.
+- Multipass often uses a Snap-private `/tmp`; transfer archives from a folder under `$HOME` instead (the Snap cannot read the host's `/tmp` either).
+- Extract the archive into a **dedicated directory** (e.g. `mkdir -p ~/Projects/ubuntu-workstations && tar -xzf ... -C ~/Projects/ubuntu-workstations`); `git archive` tarballs have no top-level folder.
 - The VM initially has an `ubuntu` user, **not** `matteo`. Prepare the account explicitly inside the disposable VM before trying `sudo -u matteo`.
-- `git archive HEAD` contains **committed files only**; push/commit changes before archiving.
+- `git archive HEAD` contains **committed files only**; push/commit changes before archiving (or tar the working tree instead).
+- The rehearsal playbook targets `hosts: all`, and in a single VM both inventory entries (`desktop`, `laptop`) share one `$HOME`. Run it with `--limit <one-host>` (or `-f 1`): with default parallelism, concurrent `rustup`/`mise` installs for the two "hosts" race on the same `~/.cargo`/`~/.rustup`/`~/.local` and can fail with partial-download rename errors.
 - The headless test account may use disposable VM-only NOPASSWD sudo. **Never replicate this shortcut on the laptop or real desktop**.
-- Run the same rehearsal twice to detect non-idempotent tasks. A VM pass is not proof that desktop GNOME or Proton authentication works.
+- Run the same rehearsal twice to detect non-idempotent tasks; aim for `failed=0` and `changed=0` on the second run. A VM pass is not proof that desktop GNOME or Proton authentication works.

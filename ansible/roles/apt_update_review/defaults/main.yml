@@ -1,0 +1,13 @@
+---
+# APT package groups available to `workstation-apt-update-review --group`.
+# Add a group to review another apt-managed tool's updates.
+workstation_apt_update_review_groups:
+  docker:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-compose-plugin
+    - docker-ce-rootless-extras
+  proton:
+    - proton-vpn-gnome-desktop

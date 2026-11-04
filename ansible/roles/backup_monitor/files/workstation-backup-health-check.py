@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only Proton Drive backup service and freshness monitor."""
+"""Read-only backup service and freshness monitor (provider-normalized record)."""
 
 import argparse
 from datetime import datetime
+import json
 from pathlib import Path
 import socket
 import subprocess
@@ -12,6 +13,7 @@ import time
 BACKUP_SERVICE = "workstation-proton-backup.service"
 BACKUP_TIMER = "workstation-proton-backup.timer"
 STAMP = Path.home() / ".local/state/workstation-backup-monitor/last-success"
+STATUS_RECORD = Path.home() / ".local/state/workstation-backup/status.json"
 REPORT = Path.home() / ".local/state/workstation-backup-monitor/latest.txt"
 
 
@@ -56,11 +58,35 @@ def main():
     # A service not yet run normally has Result=success; age of stamp handles that case.
     check("Last service result", result_ok and result == "success", result or "unavailable")
 
-    if STAMP.is_file():
+    # Prefer the normalized status record written by the backup job; fall back
+    # to the legacy success stamp for backups deployed before the record existed.
+    record = None
+    if STATUS_RECORD.is_file():
+        try:
+            record = json.loads(STATUS_RECORD.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = None
+    if record is not None:
+        try:
+            checked_at = datetime.fromisoformat(record.get("checked_at", "")).timestamp()
+            age_hours = (time.time() - checked_at) / 3600
+        except (ValueError, TypeError):
+            age_hours = None
+        record_ok = (record.get("capability") == "backup"
+                     and record.get("result") == "success"
+                     and age_hours is not None
+                     and 0 <= age_hours <= args.max_age_hours)
+        detail = (f"provider={record.get('provider')} dataset={record.get('dataset_id')} host={record.get('host')}")
+        if age_hours is not None:
+            detail += f"; {age_hours:.1f} hours ago (limit: {args.max_age_hours}h)"
+        else:
+            detail += "; unparseable checked_at"
+        check("Last successful backup", record_ok, detail)
+    elif STAMP.is_file():
         age_seconds = time.time() - STAMP.stat().st_mtime
         age_hours = age_seconds / 3600
         check("Last successful backup", 0 <= age_hours <= args.max_age_hours,
-              f"{age_hours:.1f} hours ago (limit: {args.max_age_hours}h)")
+              f"{age_hours:.1f} hours ago (limit: {args.max_age_hours}h, legacy stamp)")
     else:
         check("Last successful backup", False,
               "no recorded successful run since monitoring was installed")

@@ -8,7 +8,7 @@
 
 - name: Install controlled APT update review helper
   become: false
-  ansible.builtin.copy:
-    src: workstation-apt-update-review.py
+  ansible.builtin.template:
+    src: workstation-apt-update-review.py.j2
     dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-apt-update-review"
     mode: '0755'

@@ -103,4 +103,13 @@ for source in "${sources[@]}"; do
   rm -rf -- "$dest"
 done
 
+# Normalized success record consumed by the backup monitor; the provider
+# field lets other backup providers write the same schema later.
+status_dir="${XDG_STATE_HOME:-$HOME/.local/state}/workstation-backup"
+mkdir -p "$status_dir"
+printf '{"schema_version":1,"capability":"backup","provider":"proton_drive","host":"%s","dataset_id":"%s","checked_at":"%s","result":"success","verified_restore_at":null}\n' \
+  "$(hostname)" "{{ workstation_backup_dataset_id }}" "$(date --iso-8601=seconds)" \
+  > "$status_dir/status.json.tmp"
+mv "$status_dir/status.json.tmp" "$status_dir/status.json"
+
 echo "Completed filtered Proton Drive backup: $(date --iso-8601=seconds)"

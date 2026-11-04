@@ -2,3 +2,14 @@
 workstation_health_disk_warning_percent: 85
 workstation_health_timer_calendar: daily
 workstation_health_timer_randomized_delay: 30m
+
+# Units verified by the daily health checker. Register a new tool's systemd
+# units here to include them in health reports: system services run as root,
+# user services under the login user.
+workstation_health_system_services:
+  - docker.service
+workstation_health_user_services:
+  - syncthing.service
+workstation_health_system_timers:
+  - apt-daily.timer
+  - apt-daily-upgrade.timer

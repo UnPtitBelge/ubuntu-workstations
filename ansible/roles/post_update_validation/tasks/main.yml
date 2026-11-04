@@ -12,8 +12,8 @@
 
 - name: Install post-update validation checker
   become: false
-  ansible.builtin.copy:
-    src: workstation-post-update-validate.py
+  ansible.builtin.template:
+    src: workstation-post-update-validate.py.j2
     dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-post-update-validate"
     mode: '0755'
 

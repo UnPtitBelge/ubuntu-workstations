@@ -10,7 +10,7 @@
 - **Publication readiness: READY WITH WARNINGS.** No credentials, private keys, tokens, Syncthing identities, Proton sessions, personal emails in file contents, or private IPs were found in the working tree **or** in the full Git history.
 - **Decision item resolved (was Medium):** every commit's author/committer metadata contains `unptitbelge@pm.me` (GitHub handle `UnPtitBelge`). The owner confirmed on 2026-11-04 that this is their main GitHub email and approves publishing it — no history rewrite is needed or performed.
 - Hostnames `Omnissiah-desktop` / `Omnissiah-pocket` and username `matteo` appear in docs and inventory; the owner explicitly approved publishing them.
-- Remediation performed in this audit (owner-approved): stale `ansible/roles/health/files/` copies deleted; `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes`, and a gitleaks + static-checks CI workflow added; gitleaks 8.30.1 installed locally (checksum-verified) and run over the full history — **no leaks found**; two inert generic example inventory files, README accuracy fixes, an "external services" note, and a DEPLOY.md pointer. Both workstations remain provisionable; no operational role, script, inventory or host_vars file was changed.
+- Remediation performed in this audit (owner-approved): stale `ansible/roles/health/files/` copies deleted; `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes`, and a gitleaks + static-checks CI workflow added; gitleaks 8.30.1 installed locally (checksum-verified) and run over the full history — **no leaks found**; two inert generic example inventory files, README accuracy fixes, an "external services" note, and a DEPLOY.md pointer. Third-party dev CLIs (the `npm:` AI assistants in `dotfiles/mise/config.toml` and `crewai`/`jupyterlab`/`mistral-vibe` in `workstation_python_tools`) were removed from the shared defaults on owner request — users add their own tools per host. Both workstations remain provisionable; no operational role, script, inventory or host_vars file was changed.
 
 ## Security findings
 
@@ -52,6 +52,7 @@ A third party **can** deploy this on a fresh Ubuntu 26.04 GNOME workstation, wit
 | T7 | Info | `ansible/playbooks/workstation.yml:15-16` | GNOME role only runs when a GNOME session is detected (`workstation_hardware_has_gnome_session`); headless rehearsal (`rehearsal-headless.yml`) covers base/shell/bootstrap/languages only. | Expected; documented. |
 | T8 | Info | `playbooks/validate-workstation.yml`, `rehearsal-headless.yml` | Ubuntu 26.04-only assertions; `sudo-rs` incompatibility with Ansible documented in `docs/ubuntu-26.04-compatibility.md`. | Scope is explicit in README/DEPLOY. |
 | T9 | Info | docs | Fish shell assumed for interactive commands; `scripts/bootstrap.sh` is POSIX `sh`. | Fine. |
+| T10 | Info | `ansible/playbooks/rehearsal-headless.yml` | The rehearsal playbook targets `hosts: all`; in a single VM both inventory entries share one `$HOME`, so default parallelism makes concurrent `rustup`/`mise` installs race (observed: `rustup` partial-download rename failure). Real per-machine provisioning is unaffected (one host per machine); the rehearsal must be run with `--limit <host>` or `-f 1`. Now documented in `WORKSTATION-INSTALL.md` §7. | Rehearsal-only; verified working around it. |
 
 ## Provider coupling (implemented vs proposed)
 
@@ -93,6 +94,9 @@ All read-only. Run on the desktop (`Omnissiah-desktop`), repo `~/Projects/ubuntu
 | `python3 scripts/audit-workstation.py .` | 0 errors, 4 warnings (intentional historical "Restic" references), 10 info notes; 58 YAML files parsed; exit 0 |
 | `python3 -m py_compile` on all tracked `*.py` | initially all pass **except** `ansible/roles/health/files/workstation-health-check.py` (S2); after deleting the stale `files/` copies, **all pass** |
 | `gitleaks detect --source . --redact` (gitleaks 8.30.1, installed from the official GitHub release with SHA-256 verified against published checksums) | 56 commits scanned, **no leaks found**, exit 0 |
+| Multipass rehearsal on a clean Ubuntu 26.04 LTS VM (`ws-rehearsal`, 4 CPU / 4 GiB / 30 GiB): working tree transferred via `$HOME` (Snap-private `/tmp` cannot be read by the multipass Snap), extracted to `~/Projects/ubuntu-workstations`, `git` + `ansible-core` 2.20.1 installed, then `WORKSTATION_REHEARSAL_VM=yes ansible-playbook playbooks/rehearsal-headless.yml --limit desktop -f 1` run 3 times | Run 1 (no `--limit`, default forks): `failed=1` on the parallel `rustup` install race (T10); runs 2 and 3 with `--limit desktop -f 1`: `ok=28 changed=0 failed=0` — **idempotent** |
+| Tool verification inside the rehearsal VM | `node v22.23.4`, `openjdk 25.0.5 LTS`, `rustc 1.99.1`, `uv 0.13.7`, mise pins (copilot/gemini-cli/codex/typescript) and uv tools (crewai, jupyterlab, mistral-vibe) all installed and runnable |
+| `python3 scripts/audit-workstation.py .` inside the fresh VM | 0 errors, 5 warnings (intentional Restic mentions), 10 notes — same as on the desktop |
 | YAML parse of new files: `*.example` inventory, `.github/workflows/ci.yml` | OK |
 | `git ls-files --eol` before/after `.gitattributes` | all text files already `w/lf`, PNG `w/-text` — `.gitattributes` causes zero renormalization |
 | `ansible-playbook --syntax-check` on `workstation.yml`, `validate-workstation.yml`, `rehearsal-headless.yml` (ansible-core 2.20.1) | all pass |
@@ -117,10 +121,22 @@ All read-only. Run on the desktop (`Omnissiah-desktop`), repo `~/Projects/ubuntu
 - [x] Ansible syntax checks pass (3 playbooks, ansible-core 2.20.1); `--list-tasks` clean for both hosts
 - [x] Local gitleaks run over full history: 56 commits, no leaks
 - [x] Owner confirms hostnames + username + main email may stay public
-- [ ] Fresh-clone rehearsal by a third party (or the Multipass rehearsal playbook) on a clean Ubuntu 26.04 VM
+- [x] Fresh-machine rehearsal on a clean Ubuntu 26.04 Multipass VM (2026-11-04): foundation roles provisioned, second/third runs `changed=0 failed=0`, all toolchains verified working, repo audit clean; VM deleted and purged afterwards. Run with `--limit <host>`/`-f 1` (see T10). Remaining optional: a full GNOME desktop rehearsal, which needs a graphical session.
 - [ ] Branch protection enabled on `main`; tags `v1.0.0`–`v1.2.0` remain annotated and untouched
 - [ ] Flip repository visibility **last**, after all of the above
 
+## Post-audit implementation update (2026-11-04, owner-approved)
+
+The maintenance and backup system was completed so that registering a new tool is configuration-only (see `docs/DEPLOY.md` §7):
+
+- `health`: service/timer checks are now variable-driven (`workstation_health_system_services`, `workstation_health_user_services`, `workstation_health_system_timers`).
+- `weekly_report` and `desktop_alerts`: report sources render from the shared `workstation_report_sources` variable (with optional per-source `max_age_hours`); the tool-update report was added to the consolidated set.
+- `tool_updates`: `workstation-tool-update-check` now also discovers outdated **uv** tools (`uv tool list --outdated`) and emits an `OVERALL` status line.
+- `post_update_validation` and `apt_update_review`: package groups are variable-driven (`workstation_post_update_groups`, `workstation_apt_update_review_groups`); new post-update groups get a generic still-installed check.
+- `backup`: the backup script now writes a normalized `~/.local/state/workstation-backup/status.json` record (MIGRATE.md §5 schema, `provider: proton_drive`, `dataset_id` from the new `workstation_backup_dataset_id` variable); `workstation-backup-health-check` consumes it with the legacy `last-success` stamp as fallback. Unit names remain Proton-specific (renaming is a separate reviewed migration).
+
+All changes are read-only monitors plus additive, backward-compatible behavior; both `desktop` and `laptop` keep working, and the changes were validated with `py_compile`, template render tests, `--syntax-check`, `--list-tasks` and the repository audit script (see validation table).
+
 ## Conclusion
 
-**READY WITH WARNINGS.** No sensitive data (secrets, keys, sessions, device IDs, private network identifiers) exists in the current tree or in the complete Git history — confirmed by both a manual full-blob scan and gitleaks 8.30.1 (56 commits, no leaks). The owner has approved publishing the commit email, hostnames and username. This audit added `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes`, a gitleaks CI workflow, generic example inventory files, and documentation fixes, and deleted the stale broken `health/files/` duplicates. The only remaining items before flipping visibility are repository **settings** (GitHub secret scanning/push protection, branch protection) and an optional third-party fresh-clone rehearsal. Both `desktop` and `laptop` remain provisionable with their existing configuration; no operational file was changed.
+**READY WITH WARNINGS.** No sensitive data (secrets, keys, sessions, device IDs, private network identifiers) exists in the current tree or in the complete Git history — confirmed by both a manual full-blob scan and gitleaks 8.30.1 (56 commits, no leaks). The owner has approved publishing the commit email, hostnames and username. This audit added `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes`, a gitleaks CI workflow, generic example inventory files, and documentation fixes, and deleted the stale broken `health/files/` duplicates. The only remaining items before flipping visibility are repository **settings** (GitHub secret scanning/push protection, branch protection). A clean-machine Multipass rehearsal was executed and passed (idempotent, toolchains verified); only an optional full GNOME-desktop rehearsal remains, which needs a graphical session. Both `desktop` and `laptop` remain provisionable with their existing configuration; no operational file was changed.

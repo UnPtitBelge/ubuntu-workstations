@@ -19,7 +19,7 @@ An opinionated personal workstation setup for **Ubuntu Desktop 26.04 LTS**, mana
 | --- | --- |
 | Desktop | GNOME 50, Yaru Blue Dark, appearance settings, Ubuntu Dock, shortcuts and Resource Monitor |
 | Shell | Fish, Ghostty, Starship, zoxide and shell configuration |
-| Development | Git, mise (Node.js 22, Java and selected npm CLIs), uv/Python, rustup/Rust |
+| Development | Git, mise (Node.js 22, Java), uv/Python, rustup/Rust — add your own extra tools in `dotfiles/mise/config.toml` or `workstation_python_tools` |
 | Containers | Docker Engine, Compose, Buildx and Containerlab |
 | Virtualization | QEMU and Multipass; hardware/KVM detection |
 | Synchronization | Syncthing user service; approved shared folders and file versioning |

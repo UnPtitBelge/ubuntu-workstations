@@ -10,9 +10,9 @@ import sys
 import time
 
 SOURCES = (
-    ("System health", ".local/state/workstation-health/latest.txt", "HEALTHY"),
-    ("Configuration drift", ".local/state/workstation-drift/latest.txt", "NO DRIFT DETECTED"),
-    ("Proton Drive backup", ".local/state/workstation-backup-monitor/latest.txt", "HEALTHY"),
+{% for source in workstation_report_sources %}
+    ({{ source.name | to_json }}, {{ source.path | to_json }}, {{ source.expected | to_json }}{% if source.max_age_hours is defined %}, {{ source.max_age_hours | float }}{% endif %}),
+{% endfor %}
 )
 OVERALL_RE = re.compile(r"^OVERALL:\s*(.+?)\s*$", re.MULTILINE)
 DETAIL_RE = re.compile(r"^\[(?:OK|WARN|DRIFT|FAIL|ERROR)\].*$", re.MULTILINE)
@@ -20,7 +20,8 @@ DETAIL_RE = re.compile(r"^\[(?:OK|WARN|DRIFT|FAIL|ERROR)\].*$", re.MULTILINE)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-age-hours", type=float, default=48)
+    parser.add_argument("--max-age-hours", type=float, default=48,
+                        help="Default maximum report age; per-source max_age_hours overrides it")
     args = parser.parse_args()
     if args.max_age_hours <= 0:
         parser.error("--max-age-hours must be positive")
@@ -31,13 +32,15 @@ def main():
         "WORKSTATION WEEKLY MAINTENANCE REPORT",
         f"Host: {socket.gethostname()}",
         "Generated: " + datetime.now().astimezone().isoformat(timespec="seconds"),
-        f"Maximum source report age: {args.max_age_hours:g} hours",
+        f"Default maximum source report age: {args.max_age_hours:g} hours (per-source overrides apply)",
         "",
     ]
     issues = []
     now = time.time()
 
-    for name, relative, expected in SOURCES:
+    for entry in SOURCES:
+        name, relative, expected = entry[0], entry[1], entry[2]
+        max_age = entry[3] if len(entry) > 3 else args.max_age_hours
         path = home / relative
         lines.append(f"== {name} ==")
         if not path.is_file():
@@ -53,9 +56,9 @@ def main():
             lines.extend([f"[WARN] Cannot read report: {exc}", ""])
             continue
 
-        if not 0 <= age_hours <= args.max_age_hours:
+        if not 0 <= age_hours <= max_age:
             issues.append(name)
-            lines.append(f"[WARN] Report age {age_hours:.1f}h exceeds limit {args.max_age_hours:g}h")
+            lines.append(f"[WARN] Report age {age_hours:.1f}h exceeds limit {max_age:g}h")
         else:
             lines.append(f"[OK] Report age: {age_hours:.1f}h")
 
