@@ -30,7 +30,9 @@ A new Git revision does not mean it has been applied to this machine.
 The setup has four layers: Git/Ansible declares intent, installed systemd units
 schedule work, helpers produce reports, and notifications draw attention to
 some results. The `workstation` TUI brings those local observations together;
-it does not run jobs or repair failures.
+browsing only reads evidence. Selected monitoring jobs can also be run manually
+after reviewing and confirming their effects; failures are never repaired
+automatically.
 
 ## 2. Read existing results before running more checks
 
@@ -40,11 +42,21 @@ If the console is installed, start here:
 workstation
 ```
 
-Use Up/Down (or j/k) to select, Space for the saved report (Enter also works),
-`l` for the selected journal, `r` to reread existing evidence, `?` for help and `q` to quit. Rereading
-never runs a check/upload/restore. For a single noninteractive snapshot use
+Use `h`/`l` for the previous/next tab, or 1–6 for All, Health, Backup, Updates,
+Services and Reports. Use Up/Down
+(or j/k) to select, Space for the saved report (Enter also works), `L` (Shift+l) for the
+selected journal, `r` to reread existing evidence, `?` for help and `q` to quit.
+Rereading never runs a check/upload/restore. For a single noninteractive snapshot use
 `workstation --status` or `workstation --json`. Logs and full reports are shown
 only on request and may contain private paths.
+
+To run a supported monitoring job, select it and press `x`. Review the host,
+command and effects, then press `y` to run once or `n`/Escape to cancel. Space
+and Enter never confirm a run. Use `a` for the last action result. Runs can
+replace saved reports; update discovery can query upstreams and notification
+jobs can send desktop alerts. Backup uploads/restores, upgrades, Syncthing and
+post-update baseline changes are not available as TUI actions. See the
+[manual-run reference](docs/OPERATIONS.md#manual-job-runs).
 
 If the command is missing, follow [console-only installation](docs/DEPLOY.md#install-only-the-monitoring-console).
 You can also inspect the underlying evidence directly:

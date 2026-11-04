@@ -42,4 +42,8 @@ focus, resizing, literal report rendering and delayed journal completion. A
 pseudo-terminal smoke test exercises real terminal navigation/resize/exit with
 synthetic evidence. An isolated role installation checks valid private
 configuration and second-pass convergence in a temporary home (package
-installation is skipped). No console test reads live journals or contacts a provider.
+installation is skipped). Action tests inject a fake executor: they cover tab
+filtering/selection, cancellation, confirmation, duplicate prevention, service
+allowlisting, fresh intent checks, failure/timeout results and navigation while
+a job is pending. No console test starts real services, reads live journals or
+contacts a provider.

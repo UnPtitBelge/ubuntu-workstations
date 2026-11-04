@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local, read-only workstation dashboard. Never runs jobs or contacts providers."""
+"""Local workstation dashboard with inspection and confirmed monitoring job runs."""
 from __future__ import annotations
 
 import argparse
@@ -396,12 +396,87 @@ def text_status(snapshot):
     return '\n'.join(lines)
 
 
-def create_app(collector, interval):
+# Only these existing user oneshot services may be started by the console.
+# Configured custom report paths can never introduce executable commands.
+RUNNABLE = {
+    'health': ('workstation-health.service', 'Checks local disks/services and replaces the health report.'),
+    'drift': ('workstation-drift.service', 'Checks selected files and replaces the drift report; records observed baseline history. Does not acknowledge drift or change the baseline.'),
+    'summary': ('workstation-weekly-report.service', 'Reads existing reports and replaces the weekly summary. Does not rerun source checks.'),
+    'updates': ('workstation-tool-update-check.service', 'Queries upstream version sources and cached APT candidates; replaces the update report. Installs nothing.'),
+    'alerts': ('workstation-desktop-alerts.service', 'Reads saved reports and may send GNOME notifications and update notification deduplication state. Requires a graphical session for delivery.'),
+    'update-alerts': ('workstation-tool-update-alerts.service', 'Reads the update report and may send GNOME notifications and update notification deduplication state. Installs nothing.'),
+}
+CATEGORIES = (('all', 'All'), ('health', 'Health'), ('backup', 'Backup'),
+              ('updates', 'Updates'), ('services', 'Services'), ('reports', 'Reports'))
+
+
+def category_for(row):
+    key = row['id']
+    if key in ('health', 'drift'):
+        return 'health'
+    if key in ('backup', 'restore') or key.startswith(('other-backup-', 'other-restore-')):
+        return 'backup'
+    if key in ('updates', 'post-update', 'update-alerts', 'apt-lists', 'apt-upgrades'):
+        return 'updates'
+    if key in ('alerts', 'sync'):
+        return 'services'
+    return 'reports'
+
+
+def action_plan(snapshot, job_id):
+    """Fail closed; a missing report may be checked, untrusted intent may not."""
+    if snapshot.get('config_warning'):
+        raise ValueError('Console intent is unavailable or belongs to another host; reconcile its configuration first.')
+    if job_id not in RUNNABLE:
+        raise ValueError('Manual execution is not available for this job. Backup/restore, upgrades, continuous services and custom reports remain inspection-only.')
+    row = next((row for row in snapshot['jobs'] if row['id'] == job_id), None)
+    service, effect = RUNNABLE[job_id]
+    if not row or row['enabled'] is not True or row['scope'] != 'user' or row['service'] != service:
+        raise ValueError('This job is disabled or its deployed intent does not match a supported user service.')
+    props = row['service_properties']
+    if props.get('LoadState') != 'loaded':
+        raise ValueError('The service is missing, masked or unavailable; deploy/inspect it first.')
+    if props.get('ActiveState') not in ('inactive', 'failed'):
+        raise ValueError('The service is running, transitioning or its activity is unknown. Inspect its journal before trying again.')
+    return dict(id=job_id, host=snapshot['host'], label=row['label'], service=service, effect=effect,
+                command=['systemctl', '--user', '--no-ask-password', 'start', service])
+
+
+def run_service(argv):
+    """Explicit mutation boundary: invoked only after a user confirms a plan."""
+    try:
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=120, check=False,
+                                env={**os.environ, 'LC_ALL': 'C', 'SYSTEMD_COLORS': '0', 'SYSTEMD_PAGER': 'cat'})
+        return result.returncode
+    except subprocess.TimeoutExpired:
+        return None  # systemctl timing out does not stop the systemd job.
+    except OSError:
+        return 2
+
+
+def run_job(collector, confirmed_plan, runner=run_service):
+    # Recheck on the worker immediately before execution; never trust a cached row.
+    try:
+        plan = action_plan(collector.snapshot(), confirmed_plan['id'])
+        if plan != confirmed_plan:
+            raise ValueError('Job intent changed after confirmation; review a new plan.')
+    except ValueError as exc:
+        return 'NOT STARTED: ' + str(exc)
+    code = runner(plan['command'])
+    if code is None:
+        return 'OUTCOME UNKNOWN: timed out waiting for ' + plan['service'] + '. It may still be running. Inspect its journal; no stop or automatic retry was issued.'
+    if code:
+        return f'FAILED: {plan["service"]} returned systemctl exit {code}. Inspect its journal and report before retrying.'
+    return 'COMPLETED: ' + plan['service'] + '. The service invocation finished; inspect the reread evidence for the job outcome. This does not prove notification delivery.'
+
+
+def create_app(collector, interval, action_runner=run_service):
     """Lazy UI imports keep the status/JSON CLI usable without Textual."""
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import VerticalScroll
-    from textual.widgets import DataTable, Footer, Header, Static
+    from textual.widgets import DataTable, Footer, Header, Static, Tab, Tabs
     from rich.text import Text
 
     class ConsoleApp(App):
@@ -411,6 +486,8 @@ def create_app(collector, interval):
         Screen { background: $surface; }
         #identity { height: auto; padding: 1 2; background: $panel; }
         #summary { height: auto; padding: 0 2; color: $accent; }
+        #categories { margin: 0 2; }
+        #action-status { height: auto; max-height: 3; padding: 0 2; color: $warning; }
         #jobs { height: 1fr; margin: 1 2 0 2; border: round $primary; }
         #preview { height: 6; padding: 0 2; border-top: solid $primary; }
         #reader { height: 1fr; margin: 1 2; border: round $primary; display: none; }
@@ -422,12 +499,18 @@ def create_app(collector, interval):
         .compact #summary { height: 1; padding: 0 1; }
         .compact #jobs, .compact #reader { margin: 0; }
         .compact #preview { height: 3; padding: 0 1; }
+        .tiny #preview, .tiny #notice, .tiny #summary { display: none; }
         '''
         BINDINGS = [
             Binding('space', 'open_report', 'Open report', priority=True),
             Binding('enter', 'open_report', 'Open report', show=False, priority=True),
             Binding('escape', 'overview', 'Back', priority=True),
-            Binding('l', 'logs', 'Journal'), Binding('r', 'reread', 'Reread'),
+            Binding('h', 'cycle_category(-1)', 'Previous tab'),
+            Binding('l', 'cycle_category(1)', 'Next tab'),
+            Binding('L', 'logs', 'Journal'), Binding('r', 'reread', 'Reread'),
+            Binding('x', 'run_job', 'Run job'), Binding('a', 'action_result', 'Last action'),
+            Binding('y', 'confirm_run', show=False), Binding('n', 'cancel_run', show=False),
+            *[Binding(str(i), f'category({i - 1})', show=False) for i in range(1, 7)],
             Binding('?', 'help', 'Help'), Binding('q', 'quit', 'Quit', priority=True),
             Binding('j', 'move(1)', show=False), Binding('k', 'move(-1)', show=False),
         ]
@@ -438,16 +521,23 @@ def create_app(collector, interval):
             self.mode = 'overview'
             self.busy = False
             self.request = 0
+            self.category = 'all'
+            self.visible_jobs = []
+            self.tab_selection = {}
+            self.confirmed_plan = None
+            self.last_action = 'No job has been run from this console session.'
 
         def compose(self) -> ComposeResult:
             yield Header()
             yield Static('Reading local evidence…', id='identity', markup=False)
             yield Static('', id='summary', markup=False)
+            yield Tabs(*(Tab(f'{i} {label}', id=key) for i, (key, label) in enumerate(CATEGORIES, 1)), id='categories')
             yield DataTable(id='jobs', cursor_type='row', zebra_stripes=True)
             yield Static('Select a job, then press Space to open its report.', id='preview', markup=False)
             with VerticalScroll(id='reader', can_focus=True):
                 yield Static('', id='document', markup=False)
-            yield Static('READ ONLY • Deployed intent • No cloud requests or repairs', id='notice', markup=False)
+            yield Static('', id='action-status', markup=False)
+            yield Static('Inspection • x reviews a manual run • r only rereads evidence', id='notice', markup=False)
             yield Footer()
 
         def on_mount(self):
@@ -464,12 +554,13 @@ def create_app(collector, interval):
             self.executor.shutdown(wait=False, cancel_futures=True)
 
         def on_resize(self, event):
-            self.screen.set_class(event.size.height < 24 or event.size.width < 80, 'compact')
+            self.screen.set_class(event.size.height < 30 or event.size.width < 80, 'compact')
+            self.screen.set_class(event.size.height < 18, 'tiny')
 
         def selected(self):
-            if self.snapshot and self.snapshot['jobs']:
-                index = min(self.query_one(DataTable).cursor_row, len(self.snapshot['jobs']) - 1)
-                return self.snapshot['jobs'][index]
+            if self.visible_jobs:
+                index = min(self.query_one(DataTable).cursor_row, len(self.visible_jobs) - 1)
+                return self.visible_jobs[index]
             return None
 
         def poll(self):
@@ -480,29 +571,32 @@ def create_app(collector, interval):
                     result = future.result()
                 except Exception as exc:
                     self.query_one('#notice', Static).update(f'Cannot read evidence ({type(exc).__name__}); press r to retry.')
+                    if kind == 'run':
+                        self.last_action = f'OUTCOME UNKNOWN: action worker failed ({type(exc).__name__}). Inspect the service journal before retrying.'
+                        self.query_one('#action-status', Static).update(self.last_action)
+                        if self.mode == 'action':
+                            self.query_one('#document', Static).update(self.last_action)
                     self.last_read = time.monotonic()
                     return
-                self.query_one('#notice', Static).update('READ ONLY • r rereads evidence; it never runs monitoring jobs.')
+                self.query_one('#notice', Static).update('Inspection • x reviews a manual run • r only rereads evidence')
                 if kind == 'snapshot':
                     self.apply_snapshot(result)
                     self.last_read = time.monotonic()
+                elif kind == 'run':
+                    self.last_action = clean(result)
+                    self.query_one('#action-status', Static).update(self.last_action)
+                    if self.mode == 'action':
+                        self.query_one('#document', Static).update(self.last_action)
+                    self.action_reread()
                 elif self.mode == 'logs' and request == self.request:
                     self.query_one('#document', Static).update(clean(result))
-            if not self.busy and time.monotonic() - self.last_read >= interval:
+            if not self.busy and self.mode != 'confirm' and time.monotonic() - self.last_read >= interval:
                 self.action_reread()
 
         def apply_snapshot(self, snapshot):
             previous = self.selected()
             self.snapshot = snapshot
-            table = self.query_one(DataTable)
-            table.clear()
-            colors = {'HEALTHY': 'green', 'FAILED': 'red', 'STALE': 'yellow', 'UNKNOWN': 'yellow', 'DISABLED': 'dim'}
-            for row in snapshot['jobs']:
-                table.add_row(Text(clean(row['label'])), Text(row['state'], style=colors[row['state']]),
-                              Text(age_label(row['age_hours'])), Text(clean(row['activity'])), key=row['id'])
-            if previous:
-                index = next((i for i, row in enumerate(snapshot['jobs']) if row['id'] == previous['id']), 0)
-                table.move_cursor(row=index)
+            self.populate_jobs(previous['id'] if previous else None)
             identity = f"{snapshot['host']}  /  {snapshot['profile']}  /  {snapshot['overall']}\n"
             identity += '  '.join(f'{k}={v}' for k, v in snapshot['providers'].items())
             self.query_one('#identity', Static).update(clean(identity))
@@ -516,12 +610,45 @@ def create_app(collector, interval):
                 self.query_one('#document', Static).update(clean(
                     details(row, collector.reports.get(row['id'], 'No saved report.'))))
 
+        def populate_jobs(self, selected_id=None):
+            table = self.query_one(DataTable)
+            self.visible_jobs = [row for row in self.snapshot['jobs']
+                                 if self.category == 'all' or category_for(row) == self.category]
+            table.clear()
+            colors = {'HEALTHY': 'green', 'FAILED': 'red', 'STALE': 'yellow', 'UNKNOWN': 'yellow', 'DISABLED': 'dim'}
+            for row in self.visible_jobs:
+                table.add_row(Text(clean(row['label'])), Text(row['state'], style=colors[row['state']]),
+                              Text(age_label(row['age_hours'])), Text(clean(row['activity'])), key=row['id'])
+            if selected_id:
+                index = next((i for i, row in enumerate(self.visible_jobs) if row['id'] == selected_id), 0)
+                table.move_cursor(row=index)
+            self.update_preview()
+
+        def action_category(self, index):
+            if self.mode != 'confirm':
+                self.query_one(Tabs).active = CATEGORIES[index][0]
+
+        def action_cycle_category(self, change):
+            index = next(i for i, (key, _) in enumerate(CATEGORIES) if key == self.category)
+            self.action_category((index + change) % len(CATEGORIES))
+
+        def on_tabs_tab_activated(self, event):
+            row = self.selected()
+            if row:
+                self.tab_selection[self.category] = row['id']
+            self.category = event.tab.id
+            self.action_overview()
+            if self.snapshot:
+                self.populate_jobs(self.tab_selection.get(self.category))
+
         def update_preview(self):
+            self.query_one('#preview', Static).update('No jobs in this category.')
             row = self.selected()
             if row:
                 self.query_one('#preview', Static).update(clean('\n'.join([
                     row['label'] + ' • ' + row['state'], '; '.join(row['reasons']),
-                    'Last trigger: ' + row['last_trigger'], 'Next run: ' + row['next_run']])))
+                    'Last trigger: ' + row['last_trigger'], 'Next run: ' + row['next_run'],
+                    'x: review manual run' if row['id'] in RUNNABLE else 'Inspection only; no manual run available'])))
 
         def on_data_table_row_highlighted(self, event):
             self.update_preview()
@@ -534,18 +661,24 @@ def create_app(collector, interval):
             self.mode = mode
             self.screen.add_class('reading')
             reader = self.query_one('#reader', VerticalScroll)
-            reader.border_title = clean(title)
+            reader.border_title = Text(clean(title))
             self.query_one('#document', Static).update(clean(content))
             reader.scroll_home(animate=False)
             reader.focus()
 
         def action_open_report(self):
+            if self.mode == 'confirm':
+                return
+            if isinstance(self.focused, Tabs):
+                self.query_one(DataTable).focus()
+                return
             row = self.selected()
             if row:
                 self.show_document('report', row['label'] + ' / saved report',
                                    details(row, collector.reports.get(row['id'], 'No saved report.')))
 
         def action_overview(self):
+            self.confirmed_plan = None
             self.request += 1
             self.mode = 'overview'
             self.screen.remove_class('reading')
@@ -564,6 +697,44 @@ def create_app(collector, interval):
                 self.query_one('#notice', Static).update('Reading local evidence…')
                 self.pending = (self.executor.submit(collector.snapshot), 'snapshot', self.request)
 
+        def action_run_job(self):
+            if self.busy:
+                self.notify('Wait for the current operation to finish.')
+                return
+            row = self.selected()
+            if not row:
+                return
+            try:
+                plan = action_plan(self.snapshot, row['id'])
+            except ValueError as exc:
+                self.notify(str(exc), severity='warning')
+                return
+            self.confirmed_plan = plan
+            self.show_document('confirm', 'Review manual job run', '\n'.join([
+                'Host: ' + plan['host'], 'Job: ' + plan['label'],
+                'Command: ' + ' '.join(plan['command']), '', plan['effect'], '',
+                'Existing reports may be replaced. Read failures before running again.',
+                'Scheduling and Ansible configuration will remain unchanged.', '',
+                'Press y to run once. Press n or Escape to cancel.',
+                'Space/Enter does not confirm execution.']))
+
+        def action_confirm_run(self):
+            if self.mode != 'confirm' or self.busy or self.confirmed_plan is None:
+                return
+            plan, self.confirmed_plan = self.confirmed_plan, None
+            self.show_document('action', 'Manual job execution', 'Running ' + plan['service'] + '…')
+            self.last_action = 'RUNNING: ' + plan['service'] + '. Leaving this view or quitting does not stop a started systemd job.'
+            self.query_one('#action-status', Static).update(self.last_action)
+            self.busy = True
+            self.pending = (self.executor.submit(run_job, collector, plan, action_runner), 'run', self.request)
+
+        def action_cancel_run(self):
+            if self.mode == 'confirm':
+                self.action_overview()
+
+        def action_action_result(self):
+            self.show_document('action', 'Last manual action', self.last_action)
+
         def action_help(self):
             self.show_document('help', 'Keys and evidence', HELP)
 
@@ -580,13 +751,15 @@ def create_app(collector, interval):
 
 
 HELP = '''Navigation
+  h/l: previous/next tab (wraps). 1–6: select a category directly.
   Space or Enter: open the selected saved report.
   Up/Down or j/k: select a job; scroll in a report/journal.
   Mouse: select jobs, scroll, or click footer actions. Tab: change focus.
   PageUp/PageDown, Home/End: navigate long tables and documents.
-  l: read the selected service's last 40 journal lines (may contain private data).
+  L (Shift+l): read the selected service's last 40 journal lines (may contain private data).
   r: reread files and systemd properties; never runs a check/upload/restore.
-  Escape: return to overview. q: quit. ?: help.
+  x: review a supported manual run. y confirms; n/Escape cancels.
+  a: last manual action result. Escape: overview. q: quit. ?: help.
 
 Evidence
   HEALTHY: available local checks passed; read their scope/limitations.
@@ -595,6 +768,10 @@ Evidence
   UNKNOWN: evidence, attribution, baseline/configuration or user bus is unavailable.
   DISABLED: not selected/scheduled and no conflicting schedule observed.
 
+Browsing and rereading remain read-only. Only x followed by y starts a job.
+Manual runs can replace reports, query upstreams or send notifications as shown.
+Backup uploads/restores, upgrades, service restarts and custom jobs are unavailable.
+A started systemd job continues if you leave the view or quit.
 Reports and logs appear locally only on request; no uploads/exports.
 Inactive oneshot services can be successful. A schedule alone is not execution.
 Legacy restore metadata without host/dataset attribution stays UNKNOWN.

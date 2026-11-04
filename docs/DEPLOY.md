@@ -218,4 +218,7 @@ timestamp. Reports/status and intended selections remain distinct. Setting
 `workstation_console_enabled: false` skips installation and retains existing
 files; it does not remove the console. Rolling back the reviewed role/source
 and reapplying this playbook replaces only the console/configuration/completion.
+Installing the interface does not run any monitoring job. Approved manual
+monitoring-job runs are available afterward through the TUI’s `x` review and
+`y` confirmation flow; see [manual job runs](OPERATIONS.md#manual-job-runs).
 No host health or real backup/restore is proven by installing the interface.

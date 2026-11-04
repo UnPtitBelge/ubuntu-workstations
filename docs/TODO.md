@@ -7,11 +7,12 @@ it is deployed or has passed a real cloud/restore test.
 
 ## Next: management CLI
 
-**Implemented in the repository: `workstation`, a read-only TUI plus status/JSON
-CLI.** It reuses reports and local systemd evidence, with Ansible installation
-and Fish completion. The Textual UI supports Space to open reports, mouse
-navigation and scrollable evidence views. Management actions remain separate
-future work; no new scheduler is introduced.
+**Implemented in the repository: `workstation`, a TUI with read-only browsing,
+confirmed monitoring-job runs and a read-only status/JSON CLI.** It reuses
+reports and local systemd evidence, with Ansible installation and Fish completion. The Textual UI supports Space to open reports, mouse
+navigation, category tabs and scrollable evidence views. Manual health/drift,
+summary, discovery and notification jobs use a fixed user-service allowlist,
+effect review and explicit confirmation; no new scheduler is introduced.
 
 - [x] Show local host, selected profile/provider intent and installed jobs together, with an explicit distinction between desired and observed state.
 - [x] Summarize health, drift, backup, restore evidence, update discovery and post-update validation with their timestamps and evidence paths.
@@ -20,7 +21,9 @@ future work; no new scheduler is introduced.
 - [x] Tie backup/restore evidence to host, provider and dataset; handle malformed/shared/stale records without false green status.
 - [x] Offer focused detail/log views and explain the next useful action without dumping private data by default.
 - [x] Keep ordinary status inspection read-only and bounded in time. It must not query cloud accounts, refresh baselines, upload, download or repair anything implicitly.
-- [ ] Add explicit report refresh, backup preview/run and restore-test actions only with clear effects and failure propagation; persist configuration changes through Ansible.
+- [x] Add confirmed manual monitoring-job runs with effect descriptions, fresh intent/service checks, bounded execution and failure/timeout results; keep browsing read-only.
+- [ ] Add backup preview/run and restore-test actions with provider-specific effects and failure propagation; persist configuration changes through Ansible.
+- [ ] Add report search and attention-state filtering within category tabs.
 - [x] Provide useful help, stable JSON output/exit semantics and Fish completion; test missing helpers, unavailable user buses, stale reports and both backup providers without live accounts.
 
 The [operations guide](OPERATIONS.md#monitoring-tui) documents the implemented

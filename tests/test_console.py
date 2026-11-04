@@ -300,7 +300,7 @@ class ConsoleTests(unittest.TestCase):
                 if ready:
                     output += os.read(master, 65536)
             self.assertIn(b'System health', output)
-            for key in (b' ', b'\n', b'\x1b', b'l', b'?', b'\x1b', b'r'):
+            for key in (b' ', b'\n', b'\x1b', b'L', b'?', b'\x1b', b'r'):
                 os.write(master, key)
                 select.select([master], [], [], 0.05)
                 if select.select([master], [], [], 0.05)[0]:
@@ -347,7 +347,7 @@ class ConsoleTests(unittest.TestCase):
                 self.assertEqual(app.selected()['id'], selected_id)
                 await pilot.press('enter')
                 self.assertEqual(app.mode, 'report')
-                await pilot.press('escape', 'l')
+                await pilot.press('escape', 'L')
                 await pilot.pause(0.3)
                 self.assertEqual(app.mode, 'logs')
                 self.assertIn('Example log', str(app.query_one('#document', Static).render()))
@@ -361,6 +361,8 @@ class ConsoleTests(unittest.TestCase):
                     await pilot.press('space', 'j', 'pagedown', 'escape')
                     self.assertEqual(app.mode, 'overview')
                     self.assertGreater(table.size.height, 0)
+                    if size == (80, 24):
+                        self.assertGreaterEqual(table.size.height, 8)
                 await pilot.press('q')
         asyncio.run(exercise())
 
@@ -382,13 +384,162 @@ class ConsoleTests(unittest.TestCase):
                     if app.snapshot:
                         break
                     await pilot.pause(0.05)
-                await pilot.press('l')
+                await pilot.press('L')
                 self.assertTrue(started.is_set())
                 await pilot.press('?')
                 release.set()
                 await pilot.pause(0.3)
                 self.assertEqual(app.mode, 'help')
                 self.assertNotIn('late journal result', str(app.query_one('#document', Static).render()))
+        try:
+            asyncio.run(exercise())
+        finally:
+            release.set()
+
+    def test_action_allowlist_and_preflight_reject_unsafe_jobs(self):
+        snapshot = self.collector.snapshot()
+        for key in console.RUNNABLE:
+            plan = console.action_plan(snapshot, key)
+            self.assertEqual(plan['command'], ['systemctl', '--user', '--no-ask-password', 'start', console.RUNNABLE[key][0]])
+        for key in ('backup', 'restore', 'apt-lists', 'apt-upgrades', 'sync', 'post-update', 'other-backup-rclone', 'report-0', 'health;reboot'):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                console.action_plan(snapshot, key)
+        for field, value in (('enabled', False), ('enabled', None), ('scope', 'system'), ('service', 'apt-daily.service')):
+            bad = copy.deepcopy(snapshot)
+            bad['jobs'][0][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                console.action_plan(bad, 'health')
+        for prop, value in (('LoadState', 'not-found'), ('LoadState', 'masked'),
+                            ('ActiveState', 'active'), ('ActiveState', 'activating'), ('ActiveState', 'deactivating'), ('ActiveState', '')):
+            bad = copy.deepcopy(snapshot)
+            bad['jobs'][0]['service_properties'][prop] = value
+            with self.subTest(prop=prop, value=value), self.assertRaises(ValueError):
+                console.action_plan(bad, 'health')
+        snapshot['config_warning'] = 'Foreign host'
+        with self.assertRaises(ValueError):
+            console.action_plan(snapshot, 'health')
+
+    def test_action_revalidates_intent_and_propagates_failure_or_timeout(self):
+        plan = console.action_plan(self.collector.snapshot(), 'health')
+        calls = []
+        def runner(argv):
+            calls.append(argv)
+            return 0
+        self.assertIn('COMPLETED:', console.run_job(self.collector, plan, runner))
+        self.assertEqual(calls, [plan['command']])
+        self.assertIn('FAILED:', console.run_job(self.collector, plan, lambda argv: 1))
+        self.assertIn('OUTCOME UNKNOWN:', console.run_job(self.collector, plan, lambda argv: None))
+        self.runner.overrides['workstation-health.service'] = {'ActiveState': 'activating'}
+        self.assertIn('NOT STARTED:', console.run_job(self.collector, plan, runner))
+        self.assertEqual(len(calls), 1)
+        self.runner.overrides.clear()
+        tampered = {**plan, 'command': ['reboot']}
+        self.assertIn('NOT STARTED:', console.run_job(self.collector, tampered, runner))
+        self.config['hostname'] = 'another-host'
+        self.write_config()
+        self.assertIn('NOT STARTED:', console.run_job(self.collector, plan, runner))
+        self.assertEqual(len(calls), 1)
+
+    def test_action_command_boundary_handles_timeouts_and_uses_no_shell(self):
+        import subprocess
+        command = ['systemctl', '--user', '--no-ask-password', 'start', 'workstation-health.service']
+        with patch.object(console.subprocess, 'run', side_effect=subprocess.TimeoutExpired(command, 120)) as run:
+            self.assertIsNone(console.run_service(command))
+            self.assertEqual(run.call_args.kwargs['timeout'], 120)
+            self.assertNotIn('shell', run.call_args.kwargs)
+        with patch.object(console.subprocess, 'run', side_effect=FileNotFoundError):
+            self.assertEqual(console.run_service(command), 2)
+
+    def test_tabs_filter_selection_empty_category_and_space_navigation(self):
+        import asyncio
+        from textual.widgets import DataTable, Static
+        async def exercise():
+            app = console.create_app(self.collector, 30)
+            async with app.run_test(size=(110, 30)) as pilot:
+                for _ in range(50):
+                    if app.snapshot:
+                        break
+                    await pilot.pause(0.05)
+                table = app.query_one(DataTable)
+                await pilot.press('h')
+                self.assertEqual(app.category, 'reports')
+                await pilot.press('l')
+                self.assertEqual(app.category, 'all')
+                await pilot.press('l', 'j')
+                self.assertEqual(app.category, 'health')
+                self.assertEqual([row['id'] for row in app.visible_jobs], ['health', 'drift'])
+                self.assertEqual(app.selected()['id'], 'drift')
+                await pilot.press('3')
+                self.assertTrue(all(console.category_for(row) == 'backup' for row in app.visible_jobs))
+                await pilot.press('space')
+                self.assertEqual(app.mode, 'report')
+                self.assertIn('Backup status:', str(app.query_one('#document', Static).render()))
+                await pilot.press('escape', '2')
+                self.assertEqual(app.selected()['id'], 'drift')
+                await pilot.press('r')
+                await pilot.pause(0.3)
+                self.assertEqual(app.selected()['id'], 'drift')
+                for key, category in (('4', 'updates'), ('5', 'services'), ('6', 'reports'), ('1', 'all')):
+                    await pilot.press(key)
+                    self.assertEqual(app.category, category)
+                    self.assertTrue(all(category == 'all' or console.category_for(row) == category for row in app.visible_jobs))
+                # An empty category cannot leave a previous tab's report selected.
+                app.apply_snapshot({**app.snapshot, 'jobs': [row for row in app.snapshot['jobs'] if console.category_for(row) != 'reports']})
+                await pilot.press('6', 'space', 'x')
+                self.assertEqual(table.row_count, 0)
+                self.assertIsNone(app.selected())
+                self.assertEqual(app.mode, 'overview')
+        asyncio.run(exercise())
+
+    def test_tui_run_requires_confirmation_and_does_not_repeat_or_overwrite_help(self):
+        import asyncio
+        import threading
+        from textual.widgets import Static
+        calls = []
+        release = threading.Event()
+        def runner(argv):
+            calls.append(argv)
+            release.wait(3)
+            return 1
+        async def exercise():
+            app = console.create_app(self.collector, 30, action_runner=runner)
+            async with app.run_test(size=(110, 30)) as pilot:
+                for _ in range(50):
+                    if app.snapshot:
+                        break
+                    await pilot.pause(0.05)
+                await pilot.press('y', 'r')
+                await pilot.pause(0.3)
+                self.assertEqual(calls, [])
+                await pilot.press('x', 'space', 'enter')
+                self.assertEqual(app.mode, 'confirm')
+                await pilot.press('h', 'l')
+                self.assertEqual(app.mode, 'confirm')
+                self.assertEqual(app.category, 'all')
+                self.assertIn('replaces the health report', str(app.query_one('#document', Static).render()))
+                self.assertEqual(calls, [])
+                await pilot.press('n', 'y')
+                self.assertEqual(calls, [])
+                await pilot.press('x', 'escape', 'y')
+                self.assertEqual(calls, [])
+                await pilot.press('x', 'y', 'y', 'x')
+                self.assertEqual(len(calls), 1)
+                self.assertTrue(app.busy)
+                await pilot.press('?')
+                release.set()
+                for _ in range(50):
+                    if not app.busy:
+                        break
+                    await pilot.pause(0.05)
+                self.assertEqual(app.mode, 'help')
+                self.assertIn('FAILED:', app.last_action)
+                self.assertNotIn('FAILED: workstation-health', str(app.query_one('#document', Static).render()))
+                await pilot.press('a')
+                self.assertIn('FAILED: workstation-health', str(app.query_one('#document', Static).render()))
+                self.assertEqual(len(calls), 1)
+                await pilot.resize_terminal(50, 12)
+                await pilot.press('escape')
+                self.assertGreater(app.query_one('#jobs').size.height, 0)
         try:
             asyncio.run(exercise())
         finally:

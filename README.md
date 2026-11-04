@@ -5,7 +5,8 @@ setup includes GNOME, Fish/Ghostty, development tools, Docker, virtualization,
 Syncthing, Proton applications, cloud backups and maintenance jobs.
 
 **Start with [TUTORIAL.md](TUTORIAL.md)** for a walkthrough of an existing setup
-or a first installation. `workstation` opens the local monitoring TUI;
+or a first installation. `workstation` opens the local monitoring TUI with
+category tabs and confirmed manual runs for selected monitoring jobs;
 `workstation --status` prints a snapshot and `workstation --json` exposes the same
 evidence to scripts. See [console installation](docs/DEPLOY.md#install-only-the-monitoring-console).
 

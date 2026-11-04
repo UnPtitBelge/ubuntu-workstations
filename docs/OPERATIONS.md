@@ -27,22 +27,30 @@ latest repository changes have not been deployed.
 
 After [console-only installation](DEPLOY.md#install-only-the-monitoring-console),
 run `workstation` in a terminal. It reads local reports and batches systemd
-property queries; it does not contact providers, run checks or alter services.
+property queries. Browsing, automatic rereads and noninteractive CLI modes only
+inspect evidence. Explicit manual actions can start selected monitoring jobs
+after confirmation, as described below.
 The view rereads evidence every 30 seconds while open (configurable with
 `--interval`, 5–3600 seconds); there is no background daemon or new timer.
 
 | Key / option | Effect |
 | --- | --- |
+| h / l | Previous / next category tab (wraps at either end) |
+| 1–6 | Switch All / Health / Backup / Updates / Services / Reports tabs |
 | Up/Down or j/k | Select a job; scroll in a report/log view |
 | Space or Enter / `--detail JOB` | Display a saved report and evidence details |
-| l / `--logs JOB` | Read the selected service's last 40 local journal lines |
+| L (Shift+l) / `--logs JOB` | Read the selected service's last 40 local journal lines |
+| x / y / n | Review selected manual run / confirm / cancel (Escape also cancels) |
+| a | Show the last manual action result from this console session |
 | r | Reread existing files and unit properties; never refresh the underlying job |
 | ? / Escape / q | Help / overview / quit |
 | `--status` / `--json` | One snapshot as text / schema-versioned JSON, excluding raw reports and logs |
 
 The interface uses Textual with a styled, scrollable job table, state counts,
-selected-job preview and full report/journal views. Mouse selection, wheel
-scrolling and clickable footer shortcuts are supported. Tab moves focus;
+selected-job preview and full report/journal views. Categories filter the table;
+summary counts still cover all jobs. Each category keeps its selected job.
+An empty category shows no selection, and custom report sources appear in
+Reports. Mouse selection, wheel scrolling and clickable footer shortcuts are supported. Tab moves focus;
 PageUp/PageDown and Home/End navigate the focused table or document. Textual
 styles and key bindings live in `create_app()` in the console source. Reports
 are rendered as literal text, including any markup-like content.
@@ -74,8 +82,43 @@ alone does not update this snapshot. The TUI handles malformed legacy backup
 metadata conservatively; it does not repair the existing writers.
 
 Existing helpers still live in `~/.local/bin/`; repository utilities live in
-`scripts/`. Explicit management actions beyond inspection remain in the
+`scripts/`. Further management actions remain in the
 [roadmap](TODO.md#next-management-cli).
+
+#### Manual job runs
+
+Select a job and press `x` to review its host, exact command and effects. Press
+`y` to run once; `n` or Escape cancels. Space/Enter only navigate and never
+approve execution. The console rechecks deployed host intent and service state
+immediately before starting a job. Disabled, missing/masked, already running or
+unavailable services are refused. No sudo or interactive authentication is used.
+
+| Job | Effect of an approved run |
+| --- | --- |
+| Health | Checks configured local disks/services and replaces the report |
+| Drift | Checks selected files, replaces the report and records observed baseline history; never acknowledges drift or changes the baseline |
+| Weekly summary | Rebuilds the summary from existing reports; does not rerun sources |
+| Update discovery | Uses the deployed service arguments, queries upstream sources/cached APT candidates and replaces its report; installs nothing |
+| Failure notifications | Reads reports, may notify GNOME and updates notification deduplication state |
+| Update notifications | Reads the update report, may notify GNOME and updates notification deduplication state; installs nothing |
+
+These are a fixed allowlist of existing **user oneshot services**, executed with
+`systemctl --user --no-ask-password start <service>`. Report-source configuration
+cannot add executable commands. Backup uploads, restore drills, system package
+jobs, post-update validation/baseline changes, Syncthing restarts and custom
+reports remain inspection-only. No schedules or Ansible intent are changed.
+
+The UI stays responsive and permits one operation at a time. It shows RUNNING,
+COMPLETED, FAILED, NOT STARTED or OUTCOME UNKNOWN separately from job health,
+then rereads evidence after an action result. `a` reopens the latest action result
+for this session; raw command output is not exported or shown automatically.
+A zero service exit means the invocation completed, not that every monitored
+item is healthy or a notification was delivered. Inspect the report/journal.
+
+The console waits up to 120 seconds for systemctl. A timeout may leave the
+systemd job running; leaving a view or quitting also does not stop a started
+job. Inspect its journal before retrying. There are no automatic retries,
+service restarts, report acknowledgements or background repair actions.
 
 ## Quick inspection commands
 

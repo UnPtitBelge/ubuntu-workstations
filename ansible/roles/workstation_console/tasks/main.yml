@@ -22,7 +22,7 @@
         - "{{ workstation_console_config_dir }}"
         - "{{ ansible_facts['env']['HOME'] }}/.config/fish/completions"
 
-    - name: Install read-only workstation TUI and status CLI
+    - name: Install workstation TUI and read-only status CLI
       ansible.builtin.copy:
         src: workstation.py
         dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation"
