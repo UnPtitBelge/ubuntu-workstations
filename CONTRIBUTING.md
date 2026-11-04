@@ -37,13 +37,8 @@ improvements, portability patches and **new providers** are welcome.
    ```
 
    On the laptop, run the same commands on the laptop with `--limit laptop`.
-3. Run the repository validation gate shared with CI (no provisioning; tests use temporary homes and simulated systemd):
-
-   ```fish
-   cd ~/Projects/ubuntu-workstations
-   python3 scripts/maintenance-check.py
-   gitleaks detect --source . --redact   # if gitleaks is installed locally
-   ```
+3. Run the shared gate and inspect the patch as described in
+   [Repository validation](#repository-validation).
 
 4. Update documentation (`README.md`, `docs/`) when behavior changes.
 5. Open a pull request describing the change, the machines it was validated
@@ -139,3 +134,52 @@ Rules:
 
 See [SECURITY.md](SECURITY.md). Please do not open public issues for
 vulnerabilities.
+
+## Repository validation
+
+Run from the clone, using Fish:
+
+```fish
+cd ~/Projects/ubuntu-workstations
+git status --short
+git branch --show-current
+git log -1 --oneline
+python3 scripts/maintenance-check.py
+```
+
+The gate is shared with CI. It compiles Python, audits Ansible/profile YAML,
+runs isolated regression tests, syntax-checks every playbook and parses inventory.
+It does not provision, manage real services or contact cloud accounts. Test files
+and bytecode are written into temporary locations. See [test coverage](tests/README.md).
+
+For only the static repository audit:
+
+```fish
+python3 scripts/audit-workstation.py .
+```
+
+It checks YAML parse errors/duplicate keys, role layout, variable-name overlaps,
+Restic references and credential-like filenames. Overlaps may be intentional
+Ansible overrides; historical references may be legitimate. The audit is not a
+credential-content scanner and also sees local files; its warnings need review.
+
+Review the complete patch before staging specific files:
+
+```fish
+git diff --check
+git diff --stat
+git diff
+# After staging only reviewed paths:
+git diff --cached --check
+git diff --cached
+```
+
+Run a redacted secret scan where available; CI has a separate full-history
+gitleaks job. `.gitignore` does not untrack previously committed secrets. Avoid
+sharing raw reports or inventory output without inspecting their contents.
+
+Repository validation is one layer. For a target machine, use
+[Deploy](docs/DEPLOY.md#3-preview-apply-and-verify) for preview, real apply, strict audit
+and a second normal run. Verify graphical sessions, service outcomes and real
+recovery separately. Never report syntax checks or simulated services as a real
+deployment, cloud upload or restore.

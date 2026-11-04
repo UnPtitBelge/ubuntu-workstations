@@ -1,0 +1,387 @@
+# Operating your workstation
+
+Use this guide to answer three questions: what is scheduled, what last happened,
+and what you need to do. Commands are Fish-compatible and run as your ordinary
+user on the machine you are checking. This guide describes repository intent;
+it is not a live audit of either workstation.
+
+## Contents
+
+[Quick inspection commands](#quick-inspection-commands) ·
+[Automatic jobs](#what-runs-automatically) ·
+[Refresh checks](#refresh-checks-deliberately) ·
+[Backup actions](#backups-inspect-upload-and-verify-are-different-actions) ·
+[Warnings](#respond-to-a-warning) ·
+[Routine maintenance](#routine-maintenance) · [Recovery](#recovery)
+
+## Start here
+
+Begin with the summary and scheduling commands in [Quick inspection](#quick-inspection-commands).
+
+The summary is a snapshot of existing reports, not a fresh execution of every
+check. Compare its date with the source report. A missing report means unknown
+state, not healthy state. A missing helper can mean its role was skipped or the
+latest repository changes have not been deployed.
+
+There is currently no single `workstation` management command. Existing helpers
+live in `~/.local/bin/`; repository utilities live in `scripts/`. The proposed
+unified CLI is tracked in [TODO](TODO.md#next-management-cli).
+
+## Quick inspection commands
+
+These commands inspect existing state on the **local** machine. They do not run
+backups, refresh reports, install updates or apply configuration. Missing files
+or units mean you need to check deployment/feature selection; they are not proof
+of health. The following sections explain interpretation and actions.
+
+### Overview
+
+```fish
+cat ~/.local/state/workstation-weekly-report/latest.txt
+systemctl --user --failed --no-pager
+systemctl --user list-timers --all
+systemctl list-timers apt-daily.timer apt-daily-upgrade.timer
+loginctl show-user (whoami) -p Linger
+```
+
+### Read saved results
+
+```fish
+cat ~/.local/state/workstation-health/latest.txt
+cat ~/.local/state/workstation-drift/latest.txt
+cat ~/.local/state/workstation-backup-monitor/latest.txt
+cat ~/.local/state/workstation-tool-updates/latest.txt
+cat ~/.local/state/workstation-post-update/latest.txt
+```
+
+Check the date inside each report; use `stat` for its file timestamp. An old
+post-update success may be normal when no monitored packages changed.
+
+### Backup evidence
+
+The commands below use Proton. For rclone, replace `workstation-proton-backup`
+with `workstation-rclone-backup` in unit names.
+
+```fish
+systemctl --user status workstation-proton-backup.timer --no-pager
+systemctl --user show workstation-proton-backup.service -p Result -p ExecMainStatus
+journalctl --user -u workstation-proton-backup.service -n 50 --no-pager
+systemctl --user status workstation-proton-backup-restore-test.timer --no-pager
+journalctl --user -u workstation-proton-backup-restore-test.service -n 50 --no-pager
+jq . ~/.local/state/workstation-backup/status.json
+tail -3 ~/.local/state/workstation-backup/history.jsonl
+tail -3 ~/.local/state/workstation-backup/restore-tests.jsonl
+```
+
+A oneshot service can be inactive after success. Verify provider, host, dataset,
+run time and restore evidence together. A timer or `last-success` stamp alone is
+insufficient.
+
+### Other useful checks
+
+```fish
+systemctl --user status syncthing.service --no-pager
+journalctl --user -u workstation-post-update-validation.service -n 50 --no-pager
+journalctl --user -u workstation-desktop-alerts.service -n 50 --no-pager
+df -h / /home
+docker system df
+test -e /var/run/reboot-required; and echo 'Reboot required'; or echo 'No reboot pending'
+cd ~/Projects/ubuntu-workstations
+git status --short
+git log -3 --oneline
+```
+
+Docker disk usage is information, not an instruction to prune. Do not share raw
+journals or reports before reviewing them for private paths and account details.
+
+## What runs automatically
+
+These are configured defaults, in local time. Host/profile overrides, randomized
+delays and whether the user manager is running affect actual execution. Use
+`systemctl --user list-timers --all` for installed next/last runs. User timers
+marked persistent may catch up after downtime; that does not guarantee success.
+
+| Job | Default trigger | What it does | Evidence |
+| --- | --- | --- | --- |
+| Ubuntu security maintenance | System APT timers; daily policy | Refreshes package lists and installs packages from configured Ubuntu origins; no automatic reboot or dependency removal | `apt-daily.timer`, `apt-daily-upgrade.timer`; unattended-upgrades logs |
+| Backup upload | Daily 20:00, up to 30m delay | Uploads selected folders and a checksum manifest; writes local run metadata | Provider backup service journal; backup `status.json` |
+| Restore drill | Monthly, up to 2h delay | Downloads one small selected file into temporary storage and compares its checksum | `restore-tests.jsonl`; `verified_restore_at` |
+| System health | Daily, up to 30m delay | Checks configured services, disk, APT timers and reboot requirement | `workstation-health/latest.txt` |
+| Selected-file drift | Daily, up to 45m delay | Compares a small allowlist of files against the deployed baseline | `workstation-drift/latest.txt` |
+| Backup health | Daily 08:00, up to 30m delay | Checks upload age, selected provider timer/service and restore-test age | `workstation-backup-monitor/latest.txt` |
+| Weekly summary | Sunday 10:00, up to 20m delay | Reads configured source reports; does not rerun them | `workstation-weekly-report/latest.txt` |
+| Development update discovery | Sunday 11:00, up to 30m delay | Queries mise/uv/rustup and selected APT candidates; installs nothing | `workstation-tool-updates/latest.txt` |
+| Failure notifications | Every 30m, up to 5m delay | Reads reports and notifies in GNOME; suppresses repeats | `workstation-desktop-alerts.service` journal |
+| Update notifications | Daily 14:00, up to 15m delay | Reads the update report and notifies; installs nothing | `workstation-tool-update-alerts.service` journal |
+| Post-update validation | APT database change; 10m after boot then every 30m | Compares monitored package versions; validates changed groups when a baseline exists | `workstation-post-update/latest.txt`; service journal |
+
+Report paths in the table are relative to `~/.local/state/`. Backup metadata is
+under `~/.local/state/workstation-backup/`. The source schedules are in the
+[role defaults and units](../ansible/roles/) and
+[shared inventory](../ansible/inventory/group_vars/all.yml).
+
+Syncthing is a continuously running user service, not a backup timer. Its own
+GUI at <http://127.0.0.1:8384> shows peers, folders and conflicts. Pairing and
+folder approval are manual.
+
+`Linger=yes` keeps the user manager available after logout; it does not create a
+GNOME session or unlock cloud credentials. Notifications require a suitable
+graphical session. Background backups still require usable authentication.
+
+## What still needs your action
+
+- Sign in to cloud services, pair Syncthing as a unique device and approve folders.
+- Review Docker/Proton package upgrades and changes to pinned development tools.
+- Apply Git/Ansible changes on each machine; the other workstation is not updated remotely.
+- Schedule reboots and disruptive work, resolve drift/conflicts and investigate failures.
+- Verify backup coverage and recovery; migrate providers and retire old datasets explicitly.
+
+Monitoring does not restart broken services, repair configuration, clear failures,
+apply third-party upgrades, prune Docker or delete cloud data. Initial provisioning
+can install packages, start services and refresh baselines; it is a separate action.
+
+## Read the right evidence
+
+| Question | Inspect | Interpretation |
+| --- | --- | --- |
+| What should this host use? | Profile, shared inventory and host overrides | Desired configuration; not installed state |
+| Is the job scheduled? | Installed timer, `is-enabled`, next run | Scheduling only |
+| Did the last service invocation succeed? | Journal and `Result` / `ExecMainStatus` | Job outcome; a oneshot service may be inactive after success |
+| Is the result recent? | Report timestamp and underlying run timestamp | Freshness of the check and of the work are separate |
+| Was a backup uploaded? | Backup service result and `checked_at` / `result` | Check the recorded host, provider and dataset too |
+| Can a file be recovered? | Successful restore drill plus a chosen-file recovery test | One verified file does not prove every file or old revision is recoverable |
+
+Normal monitor reports end with `OVERALL: HEALTHY`; drift uses
+`OVERALL: NO DRIFT DETECTED`. An update report can be healthy while listing
+`[AVAILABLE]` versions: discovery succeeded, but upgrades still need review.
+`ATTENTION REQUIRED` means inspect the details, not rerun provisioning blindly.
+
+Default freshness limits are 48h for daily source reports/upload age, 192h for
+the weekly update-discovery report and 1080h (45 days) for verified restore age.
+An old successful post-update report alone is not an error: no monitored versions
+may have changed. Inspect an actual failure or missing baseline in the journal.
+
+## Refresh checks deliberately
+
+The quick inspection commands above only read existing state. These helpers **run checks**:
+they can write local reports/baselines or query upstreams, but do not repair the
+system or install upgrades. Read an existing failure before replacing its report.
+
+| Task | Existing command | Effects and limits |
+| --- | --- | --- |
+| Health check | `~/.local/bin/workstation-health-check` | Writes its report; checks only configured services |
+| Drift check | `~/.local/bin/workstation-drift-check` | Writes its report; covers selected files, not full Git compliance |
+| Backup health | `~/.local/bin/workstation-backup-health-check` | Writes report; checks local evidence, does not upload/download |
+| Rebuild summary | `~/.local/bin/workstation-weekly-report` | Reads existing source reports, writes summary |
+| Discover updates including default APT packages | `systemctl --user start workstation-tool-update-check.service` | Runs deployed service arguments, queries upstreams, updates report; no installation |
+| Node pin proposal | `~/.local/bin/workstation-tool-update-policy` | Queries candidates; limited to supported Node patch/minor proposals |
+| Docker package simulation | `~/.local/bin/workstation-apt-update-review --group docker --plan` | Runs APT simulation against cached indexes; prints a proposal only |
+| Proton package simulation | `~/.local/bin/workstation-apt-update-review --group proton --plan` | Same; Proton group currently targets VPN packages |
+| Validate after an approved update | `~/.local/bin/workstation-post-update-validate --check all` | Writes report and advances version baseline only on success; checks selected groups |
+| Preview failure notifications | `~/.local/bin/workstation-desktop-alerts --dry-run` | Prints proposed notifications; sends none |
+| Preview update notifications | `~/.local/bin/workstation-tool-update-alerts --dry-run` | Prints proposed notifications; sends none |
+| Local release assessment | `~/.local/bin/workstation-release-audit` | Writes a report; not full deployment, freshness or recovery proof |
+
+For a missing post-update baseline, first inspect the journal and current package
+state. An explicit successful `--check all` validates and records versions.
+`--baseline` records versions **without validation**; it is not a failure-repair
+command. `--watch` with unchanged versions does not clear an earlier failure.
+
+`workstation-tool-update-check` without arguments omits APT package selection;
+the installed service supplies it. APT candidates reflect cached package indexes.
+Exact mise pins can hide newer releases from ordinary outdated checks.
+
+## Backups: inspect, upload and verify are different actions
+
+The default provider is `proton/drive`; `google/drive` uses rclone. Choose the
+row matching your configured **and installed** provider:
+
+| Resource | Proton | rclone |
+| --- | --- | --- |
+| Upload service | `workstation-proton-backup.service` | `workstation-rclone-backup.service` |
+| Upload timer | `workstation-proton-backup.timer` | `workstation-rclone-backup.timer` |
+| Restore timer | `workstation-proton-backup-restore-test.timer` | `workstation-rclone-backup-restore-test.timer` |
+| Selection preview | `~/.local/bin/workstation-proton-backup --dry-run` | `~/.local/bin/workstation-rclone-backup --dry-run` |
+| Restore drill | `~/.local/bin/workstation-proton-backup-restore-test` | `~/.local/bin/workstation-rclone-backup-restore-test` |
+
+A selection preview can create temporary staging files but does not upload.
+Starting an upload service performs a **real cloud upload**. Running a restore
+drill performs a **real download** and records its result locally; it is not a
+preview. For enrollment and the first upload use [Install](../TUTORIAL.md#first-installation);
+for recovery and drills use [Recovery](OPERATIONS.md#recovery).
+
+Default sources are `~/Documents` and `~/Sync`, subject to exclusions in
+`workstation_backup_sources` / `workstation_backup_excludes` and host overrides.
+Do not assume `~/Projects`, home configuration, Docker volumes or VM disks are
+included. Proton's destination defaults to
+`/my-files/Workstation-Backups/<hostname>/`; rclone uses its configured remote and
+`Workstation-Backups/<hostname>/` path. Verify the record and actual destination.
+
+The normalized `status.json` and local manifest are shared latest records.
+During parallel-provider tests another run can overwrite them; use provider
+journals and the append-only history to identify which run they describe. Do
+not infer that a monitor's healthy result validates every provider or dataset.
+
+## Respond to a warning
+
+| Symptom | First step | Follow-up |
+| --- | --- | --- |
+| Backup stale or failed | Read backup monitor report and provider service journal | Check auth, destination, last real run and restore evidence; never reset success markers |
+| Restore drill failed | Read restore-test journal and `restore-tests.jsonl` | Recover a chosen file separately; a changed local source can also cause checksum mismatch |
+| Drift detected | Read the named paths and compare with managed sources | Reconcile intent before provisioning refreshes the baseline; acknowledgement is a deliberate state change |
+| Update candidate available | Read discovery report, then relevant simulation/proposal | Review compatibility and service impact before changing approved configuration |
+| Post-update failure | Read saved report and service journal | Diagnose the failed group before rerunning an explicit validation |
+| Post-update watcher fails without a report | Inspect `workstation-post-update-validation.service` journal | Missing/invalid version baseline can fail before writing a report |
+| Report missing or stale | Check its own timer and service journal | Check downtime/session conditions; rebuilding the summary does not rerun its sources |
+| No GNOME notification | Inspect reports and alert journal in a logged-in session | Check delivery separately from lingering; optional `--test-notification` sends a real notification |
+| Syncthing conflict or missing peer | Inspect its GUI and user-service journal | Preserve distinct identities; do not overwrite folders to resolve conflicts |
+
+For persistent schedule/feature changes use [Deploy](DEPLOY.md), especially
+[provider disabling](DEPLOY.md#provider-disabling-and-profile-changes). Stopping
+a timer manually is temporary operational state; keep intended changes in Ansible.
+
+## Routine maintenance
+
+Use the evidence guidance and quick inspection commands above. These checklists
+are review points, not additional scheduled jobs. Work on the machine being checked.
+
+| When | Review |
+| --- | --- |
+| An alert arrives | Read the named report/date and journal; distinguish failed work, missed execution and stale summary. Preserve evidence, diagnose the first failure, then verify a focused fix. |
+| Weekly | Read summary/source results and the last real backup; review update proposals, failed units, space, reboot requirement and Git changes. Check each workstation separately. |
+| Monthly | Verify future timer runs and job outcomes, restore evidence for the intended host/dataset, Syncthing state/conflicts, backup coverage after tool/data changes and any planned reboot. |
+| Quarterly or after recovery changes | Restore a chosen file separately and open/compare it; verify host destination, retention and independent credentials. Test Syncthing transfer only with both devices available, and GNOME delivery after login/logout/login. |
+| After configuration/package changes | Follow [Deploy](DEPLOY.md#3-preview-apply-and-verify), inspect relevant real outcomes and run monitor self-tests where appropriate. A repository pass is not a host deployment pass. |
+
+A fresh summary may contain old source results. Default restore freshness is 45
+days, and a drill covers one file. Use [Recovery](#recovery) for a chosen-file
+test. Do not reset backup markers, accept drift or reinstall working tools to
+clear an alert; notification delivery is separate from job success.
+
+### Before a release
+
+- [ ] Review staged files for scope and secrets; repository validation passes.
+- [ ] Record the exact revision and target-host deployment/audit results.
+- [ ] Verify a second normal provisioning pass has `changed=0`, or document an exception.
+- [ ] Verify current monitoring, scheduled job outcomes and recent restore evidence.
+- [ ] Validate the other workstation after its separately approved deployment, or record it as unverified.
+- [ ] Ensure the working tree is clean and the intended branch is synchronized with its remote.
+- [ ] Create an annotated tag only as a separate release decision; never overwrite an existing tag.
+
+Past release evidence belongs in [the archive](archive/README.md). It does not
+establish that a newer working tree or either live host is ready for release.
+
+## Recovery
+
+Git/Ansible reconstructs managed configuration. Cloud copies can recover selected
+files. Syncthing replicates changes and may replicate deletions. None of these
+alone is a full disk image or a complete recovery plan.
+
+### 1. Protect the data first
+
+Stop unnecessary writes to a disk that may be failing. Preserve conflicts,
+logs and still-working versions before reinstalling anything. Decide whether
+you need a single file, an older revision or a machine rebuild.
+
+Restore into a **separate directory**. Check the source host, destination and
+version before replacing any live data. Recovery credentials must be accessible
+from a trusted device independently of the failed workstation.
+
+### 2. Restore a chosen file or folder
+
+For Syncthing, inspect conflicts and `.stversions` where folder versioning was
+enabled. Stop conflicting edits on peers. Earlier versions may not exist;
+copy the candidate into a separate location and inspect it first.
+
+For cloud backup, identify the provider and host-specific destination from your
+configuration and saved evidence. On a replacement machine, the backup may be
+under the **old** hostname, not its current hostname.
+
+#### Proton example
+
+With an authenticated CLI session, inspect available backups:
+
+```fish
+proton-drive filesystem list /my-files/Workstation-Backups
+set restore_dir (mktemp -d "$HOME/workstation-restore.XXXXXXXX")
+echo $restore_dir
+```
+
+Set the actual backup hostname and download into the separate directory. This
+performs a real download:
+
+```fish
+set backup_host 'replace-with-the-backup-hostname'
+proton-drive filesystem download /my-files/Workstation-Backups/$backup_host/Documents $restore_dir
+```
+
+Inspect the resulting files and compare selected originals with `cmp` or
+`sha256sum` when available. Open the recovered file. If you need an older
+revision, inspect provider version history; the ordinary download is not proof
+that a particular historical revision was retrieved.
+
+#### rclone
+
+Use the enrolled remote named by `workstation_rclone_remote` and the configured
+`workstation_rclone_remote_parent`. Download a chosen file to a separate directory
+using that remote's verified workflow. The `google/drive` adapter can target
+non-Google backends, so confirm which remote/account you are reading. Do not use
+mirror/delete operations or download over a live source tree.
+
+Record the provider, source host, remote path/version, recovered local path and
+comparison/open result privately. A manifest can help reconcile selected file
+counts/checksums, but is not a consistent filesystem snapshot or proof of every
+older revision.
+
+### 3. Run a restore drill deliberately
+
+The installed monthly drill chooses a small regular file from the current
+filtered local selection, downloads the remote counterpart to temporary storage
+and compares SHA-256. It does not overwrite the local source or delete remote
+files. It performs a real download and can write local result metadata.
+
+Use the command matching the installed provider:
+
+```fish
+# Proton:
+~/.local/bin/workstation-proton-backup-restore-test
+# For rclone use instead: ~/.local/bin/workstation-rclone-backup-restore-test
+```
+
+Inspect its exit result and output, `restore-tests.jsonl`, `status.json` and the
+restore service journal. If metadata is missing, inconsistent or invalid, retain
+the direct verification evidence and investigate; do not forge a success marker.
+Early errors may only appear in the journal. The current scripts' metadata paths
+need further hardening, tracked in [TODO](TODO.md#correctness-before-more-automation).
+
+This test covers one file that still exists locally. It does not prove recovery
+of a deleted file, an older version, every dataset or a full machine. If the local
+file changed since the upload, a mismatch needs investigation rather than an
+automatic reupload. Perform a chosen-file recovery as well.
+
+### 4. Rebuild after reinstall or disk replacement
+
+1. Install supported Ubuntu, create your own user and arrange disk protection.
+2. Follow [Install](../TUTORIAL.md#first-installation), keeping backup scheduling disabled during enrollment.
+3. Recreate machine-local credentials; pair Syncthing as a new device unless an independently reviewed identity recovery is intended.
+4. Restore selected data into separate locations; verify it before copying into live folders.
+5. Re-clone development repositories and recover unpushed work separately if it was backed up.
+6. Run the relevant audit/service checks and second provisioning pass; prove a new service-context upload and restore before enabling timers.
+
+Ansible does not restore authenticated sessions, SSH keys, Syncthing private
+identities, passwords, live Docker volumes, VM disks or paths outside the backup
+selection. Default backup sources are Documents and Sync, not the whole home or
+Projects directory. Rebuild caches/tool binaries from approved configuration;
+restore irreplaceable data from independently protected sources.
+
+### 5. Recovery limits
+
+Filtered uploads are not immutable point-in-time snapshots. Exclusions prevent
+future uploads but do not automatically remove old cloud data. A checksum match
+for one file does not establish retention, whole-dataset integrity or independence
+from account lockout/cloud deletion.
+
+Keep an independent recovery path and a rollback window when changing providers.
+Use [Migration](MIGRATE.md) before retiring old data or credentials. Legacy Restic
+repositories/password files, if present from an earlier setup, are not used by
+current backup adapters; inspect privately before any separately approved cleanup.

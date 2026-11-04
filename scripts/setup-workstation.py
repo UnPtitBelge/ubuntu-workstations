@@ -237,7 +237,7 @@ def main() -> int:
     print()
     print("Manual enrollment still required: Proton sign-in, Syncthing pairing as a new")
     print("device, and pre-creating /my-files/Workstation-Backups/" + data["hostname"])
-    print("in Proton Drive before enabling the backup timer (docs/WORKSTATION-INSTALL.md).")
+    print("in Proton Drive before enabling the backup timer (TUTORIAL.md, First installation).")
     print("Keep setup.local.yml out of Git — it is gitignored; never put credentials in it.")
 
     if args.verify:

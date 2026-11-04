@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only drift audit for explicitly baselined workstation files.
 
-Semantics (docs/WORKSTATION-CHEATSHEET.md):
+Semantics (docs/OPERATIONS.md):
   [OK]        file matches the baseline written by the last provisioning run.
   [DRIFT]     file differs from the baseline and has NOT been acknowledged —
               an unresolved out-of-band edit; counts as an issue.

@@ -1,5 +1,7 @@
 # Public Release Audit — Ubuntu Workstations
 
+> Historical v1.3.0 record. Findings, paths and verification claims below describe earlier revisions and may conflict with later addenda. They do not establish the current working tree or live host state. Use [Operations](../OPERATIONS.md), [Deploy](../DEPLOY.md) and the [current roadmap](../TODO.md).
+
 **Date:** 2026-11-04 · **Baseline:** `v1.2.0` + post-release working tree (`main` @ `2b2b0f2`) · **Auditor:** Mistral Vibe (read-only audit + minimal documentation remediation)
 **Scope:** all 144 tracked files, the complete local Git history (56 commits, 4 annotated tags, 1 branch), and portability/provider review. No provisioning, no network changes, no history rewrite, no push.
 
@@ -154,6 +156,6 @@ The open checklist items above are now complete; the repository is **public** an
 
 - GitHub secret scanning, push protection and private vulnerability reporting enabled; branch protection on `main`; Dependabot activated (`.github/dependabot.yml`: Actions + pip).
 - CI (`.github/workflows/ci.yml`) runs green on the released `main`.
-- Post-audit features shipped in v1.3.0: multi-setup profiles (`profiles/`), vendor-namespaced providers (`ansible/roles/providers/<vendor>/<name>/` — the paths in the findings tables above moved accordingly: `ansible/roles/proton/` → `ansible/roles/providers/proton/<component>/`, `ansible/roles/backup/` → `ansible/roles/providers/proton/drive/`), onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`), and provider-following backup monitoring. Details in [PROVIDERS.md](PROVIDERS.md) and [DEPLOY.md](DEPLOY.md).
+- Post-audit features shipped in v1.3.0: multi-setup profiles (`profiles/`), vendor-namespaced providers (`ansible/roles/providers/<vendor>/<name>/` — the paths in the findings tables above moved accordingly: `ansible/roles/proton/` → `ansible/roles/providers/proton/<component>/`, `ansible/roles/backup/` → `ansible/roles/providers/proton/drive/`), onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`), and provider-following backup monitoring. Details in [PROVIDERS.md](../PROVIDERS.md) and [DEPLOY.md](../DEPLOY.md).
 - No new sensitive data was introduced by these changes; gitleaks re-run over the full history at release time: no leaks.
 - **Privacy follow-up (post-v1.3.0, owner-requested):** the two machine names were removed from the working tree and replaced with the placeholders `my-desktop` / `my-laptop` in all docs; they remain in Git history only, which the owner explicitly accepts. `workstation_device_name` is no longer stored in tracked `host_vars/*.yml`: the runtime hostname is the default machine identity (never committed), and an optional explicit pin lives in the gitignored `ansible/inventory/host_vars/<host>/local.yml` (covered by `.gitignore`; `scripts/setup-workstation.py` writes it there). The playbook's identity assertions skip placeholder (`<...>`) values.

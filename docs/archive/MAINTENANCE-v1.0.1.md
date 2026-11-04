@@ -1,6 +1,6 @@
 # Maintenance release v1.0.1 — proposed
 
-> Historical record; these instructions are not the current deployment procedure. Use [DEPLOY](../DEPLOY.md) and the [routine checklist](../WORKSTATION-ROUTINE-CHECKLIST.md).
+> Historical record; these instructions are not the current deployment procedure. Use [DEPLOY](../DEPLOY.md) and the [routine checklist](../OPERATIONS.md#routine-maintenance).
 
 The one-off `scripts/patch-backup-disable.py` has been removed: its fix is already part of `ansible/roles/providers/proton/drive/tasks/main.yml`. The commands below describe the original proposal and must not be followed on the current tree.
 

@@ -14,12 +14,13 @@ Instructions for AI coding agents working in this repository. Read this file **b
 ## Read first
 
 1. `README.md` — overview, supported machines, provisioning workflow.
-2. `docs/WORKSTATION-CHEATSHEET.md` — established operations and diagnostic commands.
-3. `docs/WORKSTATION-ROUTINE-CHECKLIST.md` — ongoing checks and release workflow.
+2. `TUTORIAL.md` — guided operation, first installation and enrollment.
+3. `docs/OPERATIONS.md` — automation, diagnostic commands, routine checks, release checklist and recovery.
 4. `docs/DEPLOY.md` — current deployment constraints and generic-workstation target design.
 5. `docs/MIGRATE.md` — provider migration policy and safeguards.
 6. `docs/TODO.md` — priorities, missing features, and measurable acceptance criteria.
-7. Relevant role defaults, tasks, templates, `ansible/playbooks/workstation.yml`, and inventory variables **before** editing them.
+7. `CONTRIBUTING.md` — repository validation and extension rules.
+8. Relevant role defaults, tasks, templates, `ansible/playbooks/workstation.yml`, and inventory variables **before** editing them.
 
 If a referenced document or command is absent, report the discrepancy. Do not invent paths, role variables, packages, unit names, or feature support.
 
@@ -51,7 +52,8 @@ ansible/roles/                           # provisioning and maintenance roles
 ansible/roles/providers/<vendor>/<name>/  # capability providers (proton/*, google/*, syncthing, wireguard, keepassxc, custom)
 scripts/                                 # repository utilities (audit, bootstrap, onboarding, maintenance)
 assets/                                  # optional versioned appearance assets
-docs/                                    # runbooks and audits (consult actual filenames)
+TUTORIAL.md                              # guided workflow and first installation
+docs/                                    # operations, deployment, providers, migration, roadmap; archive/
 README.md
 AGENTS.md
 ```

@@ -27,10 +27,10 @@ A provider value is a path relative to `ansible/roles/providers/` — either a f
 
 | Capability | Provider | Role path | What it installs/configures | Account / subscription | Secrets (never in Git) |
 | --- | --- | --- | --- | --- | --- |
-| backup | `proton/drive` | `providers/proton/drive` | Proton Drive CLI + filtered scheduled upload (`workstation-proton-backup.*`) | Proton account (Drive needs a paid plan) | Proton session in keyring |
+| backup | `proton/drive` | `providers/proton/drive` | Proton Drive CLI + filtered scheduled upload (`workstation-proton-backup.*`) | Proton account with sufficient storage/access | Proton session in keyring |
 | backup | `google/drive` | `providers/google/drive` | rclone + scheduled `workstation-rclone-backup.*`; works with any rclone remote (Google Drive, SFTP/S3 to your VPS) | depends on remote (Google account for `gdrive`) | `~/.config/rclone/rclone.conf` OAuth token / service-account JSON |
 | sync | `syncthing` | `providers/syncthing` | Syncthing user service; pairing manual, unique identity per machine | none | `~/.config/syncthing/` key/cert |
-| vpn | `proton/vpn` | `providers/proton/vpn` | Proton VPN repo package + GNOME app | Proton account (VPN needs a paid plan) | Proton session in keyring |
+| vpn | `proton/vpn` | `providers/proton/vpn` | Proton VPN repo package + GNOME app | Proton account with the required service access | Proton session in keyring |
 | vpn | `wireguard` | `providers/wireguard` | wireguard-tools; config per machine in `~/.config/wireguard/<iface>.conf`; optional autostart (`workstation_wireguard_autostart`) | self-hosted server (VPS/home) | private key in the `.conf` (mode 0600) |
 | mail | `proton/mail` | `providers/proton/mail` | Proton Mail desktop app (pinned DEB, amd64) | Proton account | Proton session in keyring |
 | mail | `google/mail` | `providers/google/mail` | Thunderbird; accounts added manually (IMAP/SMTP, OAuth for Gmail; works with any IMAP server) | any IMAP provider (Gmail, self-hosted, …) | mail password/OAuth in profile/keyring |
@@ -40,51 +40,21 @@ A provider value is a path relative to `ansible/roles/providers/` — either a f
 
 Both backup providers share the same capability-level variables (`workstation_backup_sources`, `workstation_backup_excludes`, schedule, `workstation_backup_timer_enabled`, `workstation_backup_dataset_id`, `workstation_backup_manifest_enabled`, restore-drill schedule) and both write the normalized `~/.local/state/workstation-backup/status.json` record (plus a `history.jsonl` append and an uploaded per-file SHA-256 `manifest.json`) that `workstation-backup-health-check` monitors — the monitor follows the selected provider's units automatically and also warns when the last restore drill (`verified_restore_at`, monthly `workstation-*-backup-restore-test.timer`) is stale. Unit names stay provider-specific (`workstation-proton-backup.*` vs `workstation-rclone-backup.*`) so old and new can run side by side during a migration; do not rename them in place.
 
-## Using your own provider (self-hosted / any vendor)
+## Adding a provider
 
-The layout is vendor-namespaced so the project can grow by contribution:
+Use [Contributing](../CONTRIBUTING.md#adding-a-provider) for role layout,
+discovery and adapter implementation requirements. [Migration §5](MIGRATE.md#5-adapter-and-evidence-contracts)
+owns the evidence/contract reference. A declared action is not proof that its
+operation or real data migration has been verified.
 
-```
-ansible/roles/providers/
-  proton/          # one directory per vendor
-    drive/         #   one directory per provider (role): tasks/main.yml, defaults/, templates/, files/
-    vpn/
-    pass/
-    mail/
-    _deb/          # names starting with '_' are private helpers, not selectable providers
-  google/
-    drive/
-    mail/
-  syncthing/       # single-product vendors may use a flat directory instead
-  wireguard/
-  keepassxc/
-  custom/
-```
-
-1. Create `ansible/roles/providers/<vendor>/<name>/` in **your clone** with at least `tasks/main.yml` (plus `defaults/main.yml` for your variables). Use `_`-prefixed names for shared helper roles inside a vendor directory.
-2. Declare the adapter contract in `defaults/main.yml` and record it in `tasks/main.yml` (required — the playbook fails the run otherwise):
-
-   ```yaml
-   workstation_provider_supported_actions: [install, configure, health, disable]
-   workstation_provider_manual_actions: [export, import, verify, cutover]
-   ```
-
-   plus the "Record provider adapter contract" task writing `~/.local/state/workstation-provider/<provider>.json` (copy the task from any built-in provider role; `workstation_capability` and `workstation_provider_path` are passed in by the playbook).
-3. Set `workstation_providers.<capability>: <vendor>/<name>` (or a flat `<name>`).
-4. No playbook edit is needed — the playbook includes `providers/{{ workstation_providers.<capability> }}` and lists every discovered provider in its validation error. See [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider" for the full contract and boundaries.
-
-**Provider contract** (full details in [MIGRATE.md](MIGRATE.md) §5):
-
-- Always implement `install` / `configure` / `health`.
-- Implement `export` / `import` / `verify` only where the backend supports them; otherwise list them in `workstation_provider_manual_actions` — never claim an unsupported operation succeeded.
-- Health output: write `~/.local/state/workstation-<capability>/latest.txt` containing exactly one `OVERALL:` line, and register it in `workstation_report_sources` so the weekly report and GNOME alerts pick it up. Backup providers must additionally write `~/.local/state/workstation-backup/status.json` + `history.jsonl`, upload a `manifest.json`, and provide a restore-drill script (schema in MIGRATE.md §5).
-- Preflight inventory is repository-side: extend `scripts/preflight-collect.py` with a section for your provider (never print secrets; truncate device IDs).
-- Secrets stay in `~/.config`, the keyring, or mode-0600 files — never in Git, never in backup sources.
-- Switching providers never deletes data, revokes sessions, or uninstalls the old provider. `disable`, where supported, uses the explicit flags in [DEPLOY](DEPLOY.md#provider-disabling-and-profile-changes) to stop managed units and leave data in place. Capability `enabled: false` and provider `none` only skip dispatch. VPN disconnection and desktop application shutdown/account removal are manual and are declared as such in their contracts.
+Provider `none` and capability `enabled: false` skip dispatch, leaving old
+services/data in place. Use the explicit [disable procedure](DEPLOY.md#provider-disabling-and-profile-changes)
+before retiring a selected provider. Switching providers does not migrate or
+delete data. `custom` supplies guidance, not a working replacement backend.
 
 ## Self-hosted example: one VPS
 
-A typical single-VPS setup, workstation side:
+Conceptual workstation-side choices below; the server stacks are not installed, hosted or managed by this repository:
 
 | Capability | Server side (VPS, deployed outside this repo) | Workstation provider |
 | --- | --- | --- |
@@ -98,6 +68,6 @@ Moving **real data** from one provider to another always follows the staged work
 
 ## Related
 
-- [DEPLOY.md](DEPLOY.md) §4 — architecture and acceptance criteria
+- [DEPLOY.md](DEPLOY.md) §4 — selecting capabilities and providers
 - [MIGRATE.md](MIGRATE.md) — adapter contract, migration workflow, rollback
 - [TODO.md](TODO.md) — remaining provider work
