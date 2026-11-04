@@ -54,3 +54,7 @@ workstation_python_tools:
     version: "2.24.1"
 
 workstation_rust_toolchain: stable
+
+# Enable automated Proton Drive backups on all workstations.
+workstation_backup_enabled: true
+workstation_backup_timer_enabled: true

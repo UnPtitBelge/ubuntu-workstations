@@ -22,7 +22,12 @@
 
     - health
     - drift
-    - backup_monitor
+    
+    - role: backup_monitor
+      when:
+        - workstation_backup_enabled | default(false) | bool
+        - workstation_backup_timer_enabled | default(false) | bool
+    
     - weekly_report
     - desktop_alerts
     - tool_updates
