@@ -1,0 +1,39 @@
+---
+- name: Check loginctl lingering for workstation user
+  become: false
+  ansible.builtin.command:
+    argv:
+      - loginctl
+      - show-user
+      - "{{ lookup('env', 'USER') }}"
+      - -p
+      - Linger
+      - --value
+  register: workstation_linger_status
+  changed_when: false
+  check_mode: false
+
+- name: Enable user lingering for unattended workstation jobs
+  become: true
+  ansible.builtin.command:
+    argv:
+      - loginctl
+      - enable-linger
+      - "{{ lookup('env', 'USER') }}"
+  when:
+    - workstation_linger_status.stdout | trim != 'yes'
+    - not ansible_check_mode
+
+- name: Ensure release-audit executable directory exists
+  become: false
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.local/bin"
+    state: directory
+    mode: '0755'
+
+- name: Install read-only v1.2 release audit
+  become: false
+  ansible.builtin.copy:
+    src: workstation-release-audit.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-release-audit"
+    mode: '0755'
