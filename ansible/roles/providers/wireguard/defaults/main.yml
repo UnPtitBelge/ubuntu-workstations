@@ -1,0 +1,12 @@
+---
+# VPN capability provider: WireGuard (self-hosted on a VPS or home server).
+# The private key lives in ~/.config/wireguard/<iface>.conf — never in Git.
+workstation_wireguard_enabled: true
+workstation_wireguard_packages:
+  - wireguard
+  - wireguard-tools
+workstation_wireguard_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/wireguard"
+workstation_wireguard_interface: wg0
+# Start the tunnel automatically at boot when the config file exists.
+# Keep false to manage the tunnel manually with `sudo wg-quick up <iface>`.
+workstation_wireguard_autostart: false

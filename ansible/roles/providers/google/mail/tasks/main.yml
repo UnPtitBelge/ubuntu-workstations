@@ -1,0 +1,19 @@
+---
+# Mail capability provider: Thunderbird. Account setup (IMAP/SMTP server,
+# OAuth for Gmail etc.) is intentionally manual and machine-local.
+- name: Install Thunderbird
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_thunderbird_package }}"
+    state: present
+  when: workstation_thunderbird_enabled | bool
+
+- name: Explain manual mail account enrollment
+  ansible.builtin.debug:
+    msg: >-
+      Thunderbird installed. Add your account(s) manually in the GUI
+      (IMAP/SMTP; for Gmail use the OAuth sign-in). Credentials stay in the
+      profile/keyring on this machine — never in Git. For a self-hosted mail
+      server, point Thunderbird at your server's IMAP/SMTP endpoints
+      (docs/PROVIDERS.md, self-hosted example).
+  when: workstation_thunderbird_enabled | bool

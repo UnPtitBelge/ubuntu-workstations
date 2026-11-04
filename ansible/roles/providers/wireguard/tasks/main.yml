@@ -1,0 +1,48 @@
+---
+# VPN capability provider: WireGuard. The peer config (private key, peer
+# public key, endpoint) is supplied manually per machine in
+# ~/.config/wireguard/<interface>.conf — never committed.
+- name: Install WireGuard tools
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_wireguard_packages }}"
+    state: present
+  when: workstation_wireguard_enabled | bool
+
+- name: Ensure WireGuard config directory exists
+  ansible.builtin.file:
+    path: "{{ workstation_wireguard_config_dir }}"
+    state: directory
+    mode: '0700'
+  when: workstation_wireguard_enabled | bool
+
+- name: Check for a WireGuard config for the selected interface
+  ansible.builtin.stat:
+    path: "{{ workstation_wireguard_config_dir }}/{{ workstation_wireguard_interface }}.conf"
+  register: wireguard_config
+  when: workstation_wireguard_enabled | bool
+
+- name: Enable and start WireGuard tunnel when autostart is enabled
+  become: true
+  ansible.builtin.systemd_service:
+    name: "wg-quick@{{ workstation_wireguard_interface }}"
+    daemon_reload: true
+    enabled: true
+    state: started
+  when:
+    - workstation_wireguard_enabled | bool
+    - workstation_wireguard_autostart | bool
+    - wireguard_config.stat.exists | default(false)
+    - not ansible_check_mode
+
+- name: Explain manual WireGuard enrollment
+  ansible.builtin.debug:
+    msg: >-
+      WireGuard tools installed. Put your peer config at
+      {{ workstation_wireguard_config_dir }}/{{ workstation_wireguard_interface }}.conf
+      (chmod 600; never commit it), then either set workstation_wireguard_autostart: true
+      or run: sudo wg-quick up {{ workstation_wireguard_interface }}.
+      Verify with: wg show. Server side (VPS/home): see docs/PROVIDERS.md.
+  when:
+    - workstation_wireguard_enabled | bool
+    - not (workstation_wireguard_autostart | bool and wireguard_config.stat.exists | default(false))

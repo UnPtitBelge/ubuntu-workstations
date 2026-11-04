@@ -1,6 +1,6 @@
 [Unit]
-Description=Check Proton Drive backup status and freshness
-After=workstation-proton-backup.service
+Description=Check workstation backup status and freshness
+After={{ workstation_backup_monitor_service }}
 
 [Service]
 Type=oneshot

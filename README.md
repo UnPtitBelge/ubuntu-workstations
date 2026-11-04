@@ -96,9 +96,10 @@ The tree above describes the intended v1.2.0 layout; optional assets and documen
 
 ## Portability roadmap
 
-The configuration is **tested on two named Ubuntu workstations** and is not yet a universal installer. Capabilities (backup, sync, VPN, mail, passwords) are now separated from **providers** via `workstation_capabilities` / `workstation_providers` (see [DEPLOY.md](docs/DEPLOY.md) §4): the playbook dispatches to `ansible/roles/providers/<provider>/`, with Proton/Syncthing built-ins reproducing the original setup and a `custom` escape hatch — drop your own role in `providers/<name>/` and select it by name. Additional provider adapters (Google via rclone/Thunderbird, self-hosted VPS stacks, …) are the next step; per-host secrets and data migration remain explicit (see [MIGRATE.md](docs/MIGRATE.md)).
+The configuration is **tested on two named Ubuntu workstations** and is not yet a universal installer. Capabilities (backup, sync, VPN, mail, passwords) are now separated from **providers** via `workstation_capabilities` / `workstation_providers` (see [DEPLOY.md](docs/DEPLOY.md) §4 and [PROVIDERS.md](docs/PROVIDERS.md)): the playbook dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/`, with Proton/Syncthing built-ins reproducing the original setup and a `custom` escape hatch — contributors add their own vendor directory and select it by name (see [CONTRIBUTING.md](CONTRIBUTING.md)). Ubuntu 26.04 LTS only for now. Additional provider adapters (Google via rclone/Thunderbird, self-hosted VPS stacks, …) are the next step; per-host secrets and data migration remain explicit (see [MIGRATE.md](docs/MIGRATE.md)).
 
 - **[DEPLOY.md](docs/DEPLOY.md):** deploy an existing host today; design and acceptance criteria for new generic workstations.
+- **[PROVIDERS.md](docs/PROVIDERS.md):** capability/provider selection (Proton, Google via rclone/Thunderbird, WireGuard, KeePassXC, or your own self-hosted stack).
 - **[MIGRATE.md](docs/MIGRATE.md):** inventory, export/import, verification, cutover and rollback when replacing any provider or tool.
 - **[TODO.md](docs/TODO.md):** prioritized, testable work remaining; proposed features are not presented as implemented.
 

@@ -3,12 +3,16 @@
   hosts: workstations
   gather_facts: true
 
+  vars:
+    providers_root: "{{ (playbook_dir ~ '/../roles/providers') | realpath }}"
+
   pre_tasks:
     - name: Discover available provider roles
       ansible.builtin.find:
-        paths: "{{ playbook_dir }}/../roles/providers"
-        file_type: directory
-      register: workstation_provider_role_dirs
+        paths: "{{ providers_root }}"
+        recurse: true
+        file_type: file
+      register: workstation_provider_files
 
     - name: Validate that every selected provider role exists
       ansible.builtin.assert:
@@ -17,10 +21,18 @@
         fail_msg: >-
           Unknown provider '{{ workstation_providers[item.key] }}' for capability '{{ item.key }}'.
           Available providers: {{ workstation_available_providers | join(', ') }}.
-          Create ansible/roles/providers/{{ workstation_providers[item.key] }}/ in your clone
+          Add your own at ansible/roles/providers/<vendor>/<name>/ (docs/PROVIDERS.md, CONTRIBUTING.md)
           or select an available provider (use 'none' to skip a capability).
       vars:
-        workstation_available_providers: "{{ workstation_provider_role_dirs.files | map(attribute='path') | map('basename') | list }}"
+        # Every role directory under providers/ (vendor/name or flat name) with
+        # tasks/main.yml; directories whose name starts with '_' are helpers.
+        workstation_available_providers: >-
+          {{ workstation_provider_files.files | map(attribute='path')
+             | select('search', '/tasks/main\.yml$')
+             | map('regex_replace', '^' ~ (providers_root | regex_escape) ~ '/', '')
+             | map('regex_replace', '/tasks/main\.yml$', '')
+             | reject('search', '(^|/)_')
+             | list | sort }}
       loop: "{{ workstation_capabilities | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
@@ -39,44 +51,46 @@
       when:
         - workstation_capabilities.sync.enabled | default(true) | bool
         - workstation_providers.sync | default('syncthing') != 'none'
-        - workstation_syncthing_enabled | default(true) | bool
+        # workstation_syncthing_enabled is handled inside the provider role,
+        # so disabling it still stops the service on the next run.
 
     - name: Select vpn provider
       ansible.builtin.include_role:
-        name: "providers/{{ workstation_providers.vpn | default('proton_vpn') }}"
+        name: "providers/{{ workstation_providers.vpn | default('proton/vpn') }}"
       vars:
         workstation_capability: vpn
       when:
         - workstation_capabilities.vpn.enabled | default(true) | bool
-        - workstation_providers.vpn | default('proton_vpn') != 'none'
+        - workstation_providers.vpn | default('proton/vpn') != 'none'
 
     - name: Select backup provider
       ansible.builtin.include_role:
-        name: "providers/{{ workstation_providers.backup | default('proton_drive') }}"
+        name: "providers/{{ workstation_providers.backup | default('proton/drive') }}"
       vars:
         workstation_capability: backup
       when:
         - workstation_capabilities.backup.enabled | default(true) | bool
-        - workstation_providers.backup | default('proton_drive') != 'none'
-        - workstation_backup_enabled | default(true) | bool
+        - workstation_providers.backup | default('proton/drive') != 'none'
+        # workstation_backup_enabled is handled inside the provider role,
+        # so disabling backups still stops the timer on the next run.
 
     - name: Select passwords provider
       ansible.builtin.include_role:
-        name: "providers/{{ workstation_providers.passwords | default('proton_pass') }}"
+        name: "providers/{{ workstation_providers.passwords | default('proton/pass') }}"
       vars:
         workstation_capability: passwords
       when:
         - workstation_capabilities.passwords.enabled | default(true) | bool
-        - workstation_providers.passwords | default('proton_pass') != 'none'
+        - workstation_providers.passwords | default('proton/pass') != 'none'
 
     - name: Select mail provider
       ansible.builtin.include_role:
-        name: "providers/{{ workstation_providers.mail | default('proton_mail') }}"
+        name: "providers/{{ workstation_providers.mail | default('proton/mail') }}"
       vars:
         workstation_capability: mail
       when:
         - workstation_capabilities.mail.enabled | default(true) | bool
-        - workstation_providers.mail | default('proton_mail') != 'none'
+        - workstation_providers.mail | default('proton/mail') != 'none'
 
   roles:
     - hardware

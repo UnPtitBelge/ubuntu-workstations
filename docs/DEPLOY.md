@@ -119,7 +119,7 @@ Profiles (developer_gnome, headless, lightweight ...)
                  └── Normalized monitoring and migration metadata
 ```
 
-The selection is implemented in `ansible/inventory/group_vars/all.yml` (`workstation_capabilities`, `workstation_providers`) and dispatched in `ansible/playbooks/workstation.yml` to roles under `ansible/roles/providers/<provider>/`. Built-in providers today: `proton_drive`, `syncthing`, `proton_vpn`, `proton_mail`, `proton_pass`, and the guidance-only `custom`. To add your own (self-hosted VPS, another vendor), create `ansible/roles/providers/<name>/` in your clone and set `workstation_providers.<capability>: <name>` — no playbook edit needed. Set a provider to `none` to skip a capability.
+The selection is implemented in `ansible/inventory/group_vars/all.yml` (`workstation_capabilities`, `workstation_providers`) and dispatched in `ansible/playbooks/workstation.yml` to roles under `ansible/roles/providers/<vendor>/<name>/` (vendor-namespaced, so the project grows by contribution — see [CONTRIBUTING.md](../CONTRIBUTING.md) "Adding a provider"). Built-in providers today: `proton/drive`, `google/drive`, `syncthing`, `proton/vpn`, `wireguard`, `proton/mail`, `google/mail`, `proton/pass`, `keepassxc`, and the guidance-only `custom` — see [PROVIDERS.md](PROVIDERS.md) for the full table, account/secret requirements, and the self-hosted VPS example. To add your own (self-hosted VPS, another vendor), create `ansible/roles/providers/<vendor>/<name>/` in your clone and set `workstation_providers.<capability>: <vendor>/<name>` — no playbook edit needed. Set a provider to `none` to skip a capability. Scope: Ubuntu 26.04 LTS only.
 
 ### Capability contracts
 

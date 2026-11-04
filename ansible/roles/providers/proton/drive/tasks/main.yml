@@ -1,4 +1,9 @@
 ---
+- name: Record the backup units watched by the backup monitor
+  ansible.builtin.set_fact:
+    workstation_backup_monitor_service: workstation-proton-backup.service
+    workstation_backup_monitor_timer: workstation-proton-backup.timer
+
 - name: Configure Proton Drive CLI
   ansible.builtin.import_tasks: drive-cli.yml
   when: workstation_proton_drive_enabled | bool

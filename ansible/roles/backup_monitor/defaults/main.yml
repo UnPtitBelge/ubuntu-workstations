@@ -3,3 +3,9 @@
 workstation_backup_monitor_max_age_hours: 48
 workstation_backup_monitor_on_calendar: '*-*-* 08:00:00'
 workstation_backup_monitor_randomized_delay: '30m'
+
+# Backup systemd units watched by the monitor. Backup provider roles
+# (providers/proton/drive, providers/google/drive, ...) override these via
+# set_fact so the monitor follows the selected provider without renaming units.
+workstation_backup_monitor_service: workstation-proton-backup.service
+workstation_backup_monitor_timer: workstation-proton-backup.timer

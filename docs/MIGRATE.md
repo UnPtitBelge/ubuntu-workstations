@@ -2,7 +2,7 @@
 
 **Status:** A migration framework and manual runbook proposal for the `v1.2.0` workstation repository. **It is not an existing one-command migration tool.** Current roles are primarily Proton-centered; provider adapters, export/import orchestration and neutral monitoring remain planned work.
 
-Related: [DEPLOY.md](DEPLOY.md) · [TODO.md](TODO.md) · [WORKSTATION-ROUTINE-CHECKLIST.md](WORKSTATION-ROUTINE-CHECKLIST.md) · [WORKSTATION-RECOVERY.md](WORKSTATION-RECOVERY.md).
+Related: [DEPLOY.md](DEPLOY.md) · [PROVIDERS.md](PROVIDERS.md) · [TODO.md](TODO.md) · [WORKSTATION-ROUTINE-CHECKLIST.md](WORKSTATION-ROUTINE-CHECKLIST.md) · [WORKSTATION-RECOVERY.md](WORKSTATION-RECOVERY.md).
 
 ## Design principle: switch capabilities, not the entire stack
 
@@ -131,7 +131,7 @@ At `v1.2.0`, the `backup` role, `workstation-proton-backup.service`, backup moni
 
 ## 5. Plug-and-play contracts (schema implemented; more adapters planned)
 
-The main playbook now selects capabilities and providers (`workstation_capabilities`, `workstation_providers` in `group_vars/all.yml`) and dispatches to `ansible/roles/providers/<provider>/`; the built-in adapters today are the Proton and Syncthing ones plus the guidance-only `custom`. Adding another provider = a new role directory, no playbook edit. Monitoring consumes normalized records (`status.json` for backup, `latest.txt` with an `OVERALL` line for the rest), so it does not bind to Proton-specific units.
+The main playbook now selects capabilities and providers (`workstation_capabilities`, `workstation_providers` in `group_vars/all.yml`) and dispatches to vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/` (see [PROVIDERS.md](PROVIDERS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md)); the built-in adapters today are the Proton, Google, Syncthing, WireGuard and KeePassXC ones plus the guidance-only `custom`. Adding another provider = a new role directory, no playbook edit. Monitoring consumes normalized records (`status.json` for backup, `latest.txt` with an `OVERALL` line for the rest), so it does not bind to Proton-specific units.
 
 ```yaml
 # Active schema (defaults reproduce the original Proton + Syncthing setup)

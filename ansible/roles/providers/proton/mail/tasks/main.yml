@@ -15,7 +15,7 @@
 
 - name: Ensure Proton Mail is installed at or above the approved stable version
   ansible.builtin.include_role:
-    name: providers/proton_deb
+    name: providers/proton/_deb
   vars:
     proton_desktop_app:
       name: Proton Mail

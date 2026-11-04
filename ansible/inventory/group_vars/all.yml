@@ -83,12 +83,80 @@ workstation_capabilities:
   passwords: {enabled: true}
 
 workstation_providers:
-  backup: proton_drive
+  backup: proton/drive
   sync: syncthing
-  vpn: proton_vpn
-  mail: proton_mail
-  passwords: proton_pass
+  vpn: proton/vpn
+  mail: proton/mail
+  passwords: proton/pass
 
-# Enable automated Proton Drive backups on all workstations.
+# Enable automated backups on all workstations (any backup provider).
 workstation_backup_enabled: true
 workstation_backup_timer_enabled: true
+
+# Capability-level backup settings shared by every backup provider
+# (providers/proton_drive, providers/rclone_gdrive, ...). Provider-specific
+# settings (remote destination, CLI) stay in the provider role's defaults.
+
+# Complete folders are uploaded, preserving their folder names at destination.
+workstation_backup_sources:
+  - "{{ ansible_facts['env']['HOME'] }}/Documents"
+  - "{{ ansible_facts['env']['HOME'] }}/Sync"
+
+# Dataset identifier written to the normalized backup status record
+# (~/.local/state/workstation-backup/status.json) consumed by the backup
+# monitor. Safe charset only: letters, digits, dot, underscore, dash.
+workstation_backup_dataset_id: home-selected
+
+# Cron-like systemd schedule for the backup timer.
+workstation_backup_on_calendar: '*-*-* 20:00:00'
+workstation_backup_randomized_delay: '30m'
+
+# Ignore patterns use rsync/rclone filter syntax. Directory rules ending in /
+# match anywhere below each source. Intentionally do NOT exclude .git/ by
+# default: unpushed commits and branches may exist only on this machine.
+workstation_backup_excludes:
+  # Python
+  - '.venv/'
+  - 'venv/'
+  - 'env/'
+  - '__pycache__/'
+  - '*.pyc'
+  - '*.pyo'
+  - '*.pyd'
+  - '.pytest_cache/'
+  - '.mypy_cache/'
+  - '.ruff_cache/'
+  - '.hypothesis/'
+  - '.tox/'
+  - '.nox/'
+  - '*.egg-info/'
+  - '.coverage'
+  - '.coverage.*'
+  - 'htmlcov/'
+  # JS / front-end
+  - 'node_modules/'
+  - '.npm/'
+  - '.pnpm-store/'
+  - '.yarn/cache/'
+  - '.next/'
+  - '.nuxt/'
+  - '.turbo/'
+  - '.parcel-cache/'
+  # Generated build artifacts (remove these rules if they contain useful files)
+  - 'build/'
+  - 'dist/'
+  - 'target/'
+  - '.gradle/'
+  - '.terraform/'
+  # Cache, sync versioning, OS/editor metadata
+  - '.cache/'
+  - '.stversions/'
+  - '.DS_Store'
+  - 'Thumbs.db'
+  - 'desktop.ini'
+  - '*.swp'
+  - '*.swo'
+  - '*~'
+  - '*.tmp'
+  - '*.log'
+  - '.syncthing.*.tmp'

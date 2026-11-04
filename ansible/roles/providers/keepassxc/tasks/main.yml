@@ -1,0 +1,26 @@
+---
+# Passwords capability provider: KeePassXC. The vault database is created
+# manually in the GUI on first launch; only its parent directory is managed.
+- name: Install KeePassXC
+  become: true
+  ansible.builtin.apt:
+    name: "{{ workstation_keepassxc_package }}"
+    state: present
+  when: workstation_keepassxc_enabled | bool
+
+- name: Ensure the vault parent directory exists
+  ansible.builtin.file:
+    path: "{{ workstation_keepassxc_vault | dirname }}"
+    state: directory
+    mode: '0755'
+  when: workstation_keepassxc_enabled | bool
+
+- name: Explain manual vault enrollment
+  ansible.builtin.debug:
+    msg: >-
+      KeePassXC installed. Create/open your vault at {{ workstation_keepassxc_vault }}
+      on first launch. The vault is inside the backup sources, so it is backed
+      up; keep it out of Git and out of Syncthing shares. The master password
+      and key file stay on this machine (or in your password manager of last
+      resort) — never in this repository.
+  when: workstation_keepassxc_enabled | bool

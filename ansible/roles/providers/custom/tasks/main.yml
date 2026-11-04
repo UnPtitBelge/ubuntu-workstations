@@ -7,8 +7,9 @@
     msg: >-
       Capability '{{ workstation_capability | default('unknown') }}' uses provider 'custom':
       no built-in implementation is deployed. To use your own (self-hosted VPS,
-      other vendor, ...), create ansible/roles/providers/<name>/ in your clone
-      and set workstation_providers.{{ workstation_capability | default('?') }}: <name>.
+      other vendor, ...), create ansible/roles/providers/<vendor>/<name>/ in your
+      clone (see docs/PROVIDERS.md and CONTRIBUTING.md) and set
+      workstation_providers.{{ workstation_capability | default('?') }}: <vendor>/<name>.
       Provider contract (docs/MIGRATE.md section 5): implement install/configure/health;
       implement export/import/verify only where the backend supports them and mark
       them manual otherwise. Health output: ~/.local/state/workstation-<capability>/latest.txt

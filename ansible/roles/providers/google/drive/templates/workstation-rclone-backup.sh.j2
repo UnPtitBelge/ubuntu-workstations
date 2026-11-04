@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# rclone-based filtered backup (Google Drive or any rclone remote, e.g. SFTP
+# to your own VPS). Credentials stay in the user's rclone config
+# (~/.config/rclone/rclone.conf), never in Git or in this script.
+remote={{ workstation_rclone_remote | quote }}
+remote_parent={{ workstation_rclone_remote_parent | quote }}
+exclude_file={{ (ansible_facts['env']['HOME'] ~ '/.config/workstation-rclone-backup/excludes.txt') | quote }}
+
+usage() {
+  echo 'Usage: workstation-rclone-backup [--dry-run|--show-excludes]'
+  echo '  --dry-run: show what would be copied; never upload'
+  echo '  --show-excludes: print the Ansible-managed filter rules'
+}
+mode=backup
+case "${1:-}" in
+  '') ;;
+  --dry-run) mode=preview ;;
+  --show-excludes) mode=excludes ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+[[ -f "$exclude_file" ]] || { echo "ERROR: Missing excludes: $exclude_file" >&2; exit 1; }
+if [[ "$mode" == excludes ]]; then
+  cat "$exclude_file"
+  exit 0
+fi
+cli="$(command -v rclone || true)"
+[[ -n "$cli" ]] || { echo 'ERROR: rclone is not installed.' >&2; exit 1; }
+
+# Verify sources before taking any action.
+sources=(
+{% for source in workstation_backup_sources %}
+  {{ source | quote }}
+{% endfor %}
+)
+for source in "${sources[@]}"; do
+  [[ -d "$source" ]] || { echo "ERROR: Missing source directory: $source" >&2; exit 1; }
+done
+
+# Avoid source collisions: same basename would map to the same remote folder.
+declare -A names=()
+for source in "${sources[@]}"; do
+  normalized="${source%/}"
+  name="$(basename "$normalized")"
+  [[ -z "${names[$name]+x}" ]] || { echo "ERROR: Duplicate source basename: $name" >&2; exit 1; }
+  names["$name"]=1
+done
+
+# The remote must exist and be authenticated before anything is uploaded.
+"$cli" listremotes | grep -qx "$remote" || {
+  echo "ERROR: rclone remote '$remote' is not configured (run: rclone config)." >&2
+  exit 1
+}
+"$cli" lsd "$remote:" >/dev/null 2>&1 || {
+  echo "ERROR: rclone remote '$remote:' is not reachable (check auth/network)." >&2
+  exit 1
+}
+
+# Lock prevents overlapping timer and manual executions.
+lockdir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[[ -d "$lockdir" ]] || { echo 'ERROR: User runtime directory unavailable.' >&2; exit 1; }
+exec 9>"$lockdir/workstation-rclone-backup.lock"
+flock -n 9 || { echo 'ERROR: Another backup is running.' >&2; exit 1; }
+
+rclone_args=(copy --exclude-from="$exclude_file")
+[[ "$mode" == preview ]] && rclone_args+=(--dry-run)
+
+for source in "${sources[@]}"; do
+  source="${source%/}"
+  name="$(basename "$source")"
+  echo "Backing up: $source -> $remote:$remote_parent/$name/"
+  "$cli" "${rclone_args[@]}" "$source/" "$remote:$remote_parent/$name/"
+done
+
+# Normalized success record consumed by the backup monitor; the provider
+# field lets any backup backend write the same schema.
+status_dir="${XDG_STATE_HOME:-$HOME/.local/state}/workstation-backup"
+mkdir -p "$status_dir"
+printf '{"schema_version":1,"capability":"backup","provider":"rclone_gdrive","host":"%s","dataset_id":"%s","checked_at":"%s","result":"success","verified_restore_at":null}\n' \
+  "$(hostname)" "{{ workstation_backup_dataset_id }}" "$(date --iso-8601=seconds)" \
+  > "$status_dir/status.json.tmp"
+mv "$status_dir/status.json.tmp" "$status_dir/status.json"
+
+echo "Completed filtered rclone backup to $remote: ($(date --iso-8601=seconds))"

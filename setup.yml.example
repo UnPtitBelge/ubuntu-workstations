@@ -26,16 +26,18 @@ backup_timer_enabled: false     # enable only after Proton sign-in AND a tested 
 #   - "~/Documents"
 #   - "~/Sync"
 
-# Provider selection (capabilities: backup, sync, vpn, mail, passwords).
-# Built-ins: proton_drive, syncthing, proton_vpn, proton_mail, proton_pass, custom.
-# Use 'none' to skip a capability, or drop your own role into
-# ansible/roles/providers/<name>/ in your clone and select <name> here:
+# Provider selection (capabilities: backup, sync, vpn, mail, passwords) —
+# see docs/PROVIDERS.md. Built-ins: proton/drive, google/drive, syncthing,
+# proton/vpn, wireguard, proton/mail, google/mail, proton/pass, keepassxc, custom.
+# Use 'none' to skip a capability, or add your own vendor directory
+# ansible/roles/providers/<vendor>/<name>/ in your clone (see CONTRIBUTING.md)
+# and select <vendor>/<name> here:
 # workstation_providers:
-#   backup: proton_drive
+#   backup: proton/drive
 #   sync: syncthing
-#   vpn: proton_vpn
-#   mail: proton_mail
-#   passwords: proton_pass
+#   vpn: proton/vpn
+#   mail: proton/mail
+#   passwords: proton/pass
 
 # Manual steps that no script can do for you (see docs/WORKSTATION-INSTALL.md):
 # sign in to Proton apps, pair Syncthing as a NEW device, and pre-create

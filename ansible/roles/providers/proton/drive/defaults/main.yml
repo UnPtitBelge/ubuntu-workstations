@@ -1,0 +1,37 @@
+---
+# Proton Drive backup provider (capability: backup), Proton-specific settings.
+# The shared, provider-independent backup variables (workstation_backup_sources,
+# workstation_backup_excludes, workstation_backup_on_calendar,
+# workstation_backup_randomized_delay, workstation_backup_dataset_id,
+# workstation_backup_enabled, workstation_backup_timer_enabled) live in
+# ansible/inventory/group_vars/all.yml so every backup provider sees them.
+
+# Must exist in Proton Drive BEFORE the first manual run; the role never creates
+# cloud folders or deletes anything in Proton Drive.
+workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ ansible_facts['hostname'] }}"
+
+# Preserves changed files as Proton Drive revisions (subject to plan limits).
+workstation_backup_folder_conflict_strategy: merge
+workstation_backup_file_conflict_strategy: create-new-revision
+
+# Existing official CLI installed by this provider role.
+workstation_backup_proton_cli: "{{ ansible_facts['env']['HOME'] }}/.local/bin/proton-drive"
+
+# Explicit migration: remove ONLY the old Phase 23's known script/units/files.
+# Never removes a restic repository or password and never uninstalls restic.
+workstation_backup_cleanup_legacy_restic: true
+
+# Proton Drive CLI installed by this provider role (used by the backup script).
+workstation_proton_drive_enabled: true
+workstation_proton_drive_version: "0.9.0"
+
+workstation_proton_drive_platforms:
+  x86_64:
+    directory: linux-x64
+    sha512: >-
+      3533025ba69ae112b64e3e01fbcc1ad0688136a4043f6cf6a72886967d85fdcd9ec235479c2e113171614be5225bfba93427509a05ca5aa6071d924fa7e91ca8
+
+  aarch64:
+    directory: linux-arm64
+    sha512: >-
+      c8d5a6b174e57f06d05cb5483400b9963faf58e743b6b33706bb73ecff718047ffce6b439994255b94b5b226b90d2e91bef7418ec96c1c3f5d8bf39b6cd01321

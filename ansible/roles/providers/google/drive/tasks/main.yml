@@ -1,0 +1,97 @@
+---
+- name: Record the backup units watched by the backup monitor
+  ansible.builtin.set_fact:
+    workstation_backup_monitor_service: workstation-rclone-backup.service
+    workstation_backup_monitor_timer: workstation-rclone-backup.timer
+
+- name: Detect deployed rclone backup timer when backups disabled
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-rclone-backup.timer"
+  register: disabled_rclone_timer_file
+  when: not workstation_backup_enabled | bool
+
+- name: Disable and stop deployed rclone backup timer when backups disabled
+  ansible.builtin.systemd_service:
+    name: workstation-rclone-backup.timer
+    scope: user
+    daemon_reload: true
+    enabled: false
+    state: stopped
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - not workstation_backup_enabled | bool
+    - disabled_rclone_timer_file.stat.exists | default(false)
+    - not ansible_check_mode
+
+- name: Install rclone
+  become: true
+  ansible.builtin.apt:
+    name: rclone
+    state: present
+  when: workstation_backup_enabled | bool
+
+- name: Ensure user-local directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/workstation-rclone-backup"
+    - "{{ workstation_rclone_config_dir }}"
+  when: workstation_backup_enabled | bool
+
+- name: Validate backup provider configuration
+  ansible.builtin.assert:
+    that:
+      - workstation_rclone_remote is match('^[A-Za-z0-9_.-]+$')
+      - workstation_backup_sources | length > 0
+      - workstation_backup_sources | unique | list | length == workstation_backup_sources | length
+      - workstation_backup_dataset_id is match('^[A-Za-z0-9._-]+$')
+    fail_msg: 'Check the rclone remote name, backup sources and dataset id.'
+  when: workstation_backup_enabled | bool
+
+- name: Install rclone backup exclusion rules
+  ansible.builtin.template:
+    src: excludes.txt.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/workstation-rclone-backup/excludes.txt"
+    mode: '0600'
+  when: workstation_backup_enabled | bool
+
+- name: Install rclone backup script
+  ansible.builtin.template:
+    src: workstation-rclone-backup.sh.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-rclone-backup"
+    mode: '0700'
+  when: workstation_backup_enabled | bool
+
+- name: Install rclone backup user service
+  ansible.builtin.template:
+    src: workstation-rclone-backup.service.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-rclone-backup.service"
+    mode: '0644'
+  when: workstation_backup_enabled | bool
+
+- name: Install rclone backup user timer
+  ansible.builtin.template:
+    src: workstation-rclone-backup.timer.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-rclone-backup.timer"
+    mode: '0644'
+  when: workstation_backup_enabled | bool
+
+- name: Manage rclone backup timer
+  ansible.builtin.systemd_service:
+    name: workstation-rclone-backup.timer
+    scope: user
+    daemon_reload: true
+    enabled: "{{ workstation_backup_timer_enabled | bool }}"
+    state: "{{ 'started' if workstation_backup_timer_enabled else 'stopped' }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['user_uid'] }}/bus"
+  when:
+    - workstation_backup_enabled | bool
+    - not ansible_check_mode

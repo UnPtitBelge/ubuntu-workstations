@@ -1,0 +1,11 @@
+[Unit]
+Description=Scheduled off-site workstation backup via rclone (remote: {{ workstation_rclone_remote }})
+
+[Timer]
+OnCalendar={{ workstation_backup_on_calendar }}
+RandomizedDelaySec={{ workstation_backup_randomized_delay }}
+Persistent=true
+Unit=workstation-rclone-backup.service
+
+[Install]
+WantedBy=timers.target

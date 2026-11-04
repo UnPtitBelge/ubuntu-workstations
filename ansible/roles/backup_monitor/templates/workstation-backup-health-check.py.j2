@@ -10,8 +10,8 @@ import subprocess
 import sys
 import time
 
-BACKUP_SERVICE = "workstation-proton-backup.service"
-BACKUP_TIMER = "workstation-proton-backup.timer"
+BACKUP_SERVICE = {{ workstation_backup_monitor_service | to_json }}
+BACKUP_TIMER = {{ workstation_backup_monitor_timer | to_json }}
 STAMP = Path.home() / ".local/state/workstation-backup-monitor/last-success"
 STATUS_RECORD = Path.home() / ".local/state/workstation-backup/status.json"
 REPORT = Path.home() / ".local/state/workstation-backup-monitor/latest.txt"
@@ -37,7 +37,7 @@ def main():
         parser.error("--max-age-hours must be positive")
 
     lines = [
-        "PROTON DRIVE BACKUP HEALTH REPORT",
+        "WORKSTATION BACKUP HEALTH REPORT",
         f"Host: {socket.gethostname()}",
         "Time: " + datetime.now().astimezone().isoformat(timespec="seconds"),
         "",

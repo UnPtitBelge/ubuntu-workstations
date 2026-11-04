@@ -1,0 +1,17 @@
+---
+# rclone backup provider (capability: backup). Works with any rclone remote —
+# Google Drive by default, or an SFTP/S3 remote pointing at your own VPS.
+#
+# Reuses the capability-level variables (same names as the Proton provider):
+#   workstation_backup_sources, workstation_backup_excludes,
+#   workstation_backup_on_calendar, workstation_backup_randomized_delay,
+#   workstation_backup_timer_enabled, workstation_backup_enabled,
+#   workstation_backup_dataset_id
+#
+# Secrets: the rclone OAuth token or service-account JSON lives in
+# ~/.config/rclone/rclone.conf (create it manually with `rclone config`).
+# It is never committed and never inside the backup sources.
+
+workstation_rclone_remote: gdrive
+workstation_rclone_remote_parent: "Workstation-Backups/{{ ansible_facts['hostname'] }}"
+workstation_rclone_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/rclone"

@@ -9,17 +9,18 @@
       Proton backup monitoring requires an enabled backup service and timer.
       Confirm workstation_backup_enabled and workstation_backup_timer_enabled.
 
-- name: Check existing Proton backup systemd unit
+- name: Check existing backup systemd unit of the selected provider
   ansible.builtin.stat:
-    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.service"
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/{{ workstation_backup_monitor_service }}"
   register: workstation_backup_monitor_source_unit
 
-- name: Require the existing Proton backup service
+- name: Require the existing backup service of the selected provider
   ansible.builtin.assert:
     that:
       - workstation_backup_monitor_source_unit.stat.isreg | default(false)
     fail_msg: >-
-      Missing workstation-proton-backup.service. Deploy the backup role first.
+      Missing {{ workstation_backup_monitor_service }}. Deploy the selected backup
+      provider role first.
 
 - name: Create backup monitoring directories
   ansible.builtin.file:
@@ -30,18 +31,18 @@
     - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
     - "{{ ansible_facts['env']['HOME'] }}/.local/state/workstation-backup-monitor"
     - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user"
-    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.service.d"
+    - "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/{{ workstation_backup_monitor_service }}.d"
 
 - name: Install backup health checker
-  ansible.builtin.copy:
-    src: workstation-backup-health-check.py
+  ansible.builtin.template:
+    src: workstation-backup-health-check.py.j2
     dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation-backup-health-check"
     mode: '0755'
 
 - name: Record successful backup service completion
   ansible.builtin.copy:
     src: 10-success-stamp.conf
-    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.service.d/10-success-stamp.conf"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/{{ workstation_backup_monitor_service }}.d/10-success-stamp.conf"
     mode: '0644'
 
 - name: Install backup health service

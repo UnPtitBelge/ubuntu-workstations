@@ -1,0 +1,8 @@
+---
+# Passwords capability provider: KeePassXC with a local vault file.
+# The vault lives inside the backup sources by default, so it is backed up;
+# it is never committed to Git. For a self-hosted server (Vaultwarden),
+# see docs/PROVIDERS.md.
+workstation_keepassxc_enabled: true
+workstation_keepassxc_package: keepassxc
+workstation_keepassxc_vault: "{{ ansible_facts['env']['HOME'] }}/Documents/Passwords.kdbx"
