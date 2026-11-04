@@ -1,0 +1,55 @@
+---
+- name: Install YAML support for dashboard configuration editing
+  become: true
+  ansible.builtin.apt:
+    name:
+      - python3-yaml
+    state: present
+  when:
+    - workstation_console_enabled | bool
+    - workstation_console_install_dependencies | bool
+
+- name: Install local workstation web dashboard and inspection CLI
+  become: false
+  when: workstation_console_enabled | bool
+  block:
+    - name: Ensure console directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        - "{{ workstation_console_config_dir }}"
+        - "{{ ansible_facts['env']['HOME'] }}/.local/share/workstation/web"
+        - "{{ ansible_facts['env']['HOME'] }}/.config/fish/completions"
+
+    - name: Install workstation dashboard launcher and read-only status CLI
+      ansible.builtin.copy:
+        src: workstation.py
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation"
+        mode: '0755'
+
+    - name: Install local web dashboard server and browser assets
+      ansible.builtin.copy:
+        src: "web/{{ item }}"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/share/workstation/web/{{ item }}"
+        mode: '0644'
+      loop:
+        - index.html
+        - app.css
+        - app.js
+        - theme.js
+        - server.py
+
+    - name: Record console intent without credentials or per-run timestamps
+      ansible.builtin.template:
+        src: console.json.j2
+        dest: "{{ workstation_console_config_dir }}/console.json"
+        mode: '0600'
+
+    - name: Install Fish completion for workstation
+      ansible.builtin.copy:
+        src: workstation.fish
+        dest: "{{ ansible_facts['env']['HOME'] }}/.config/fish/completions/workstation.fish"
+        mode: '0644'

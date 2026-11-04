@@ -1,0 +1,24 @@
+---
+# Installs only the local dashboard/configuration/completion for the local user.
+# Never starts jobs, changes package policy or provisions other workstation roles.
+- name: Install workstation web dashboard only
+  hosts: workstations
+  gather_facts: true
+  become: false
+  pre_tasks:
+    - name: Require exactly one local inventory target
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - ansible_connection == 'local'
+        fail_msg: Run on the intended machine with its matching --limit inventory host.
+    - name: Check any declared non-placeholder machine identity
+      ansible.builtin.assert:
+        that:
+          - workstation_device_name == ansible_facts['hostname']
+        fail_msg: The declared identity does not match this machine; select its matching local inventory entry.
+      when:
+        - (workstation_device_name | default('')) != ''
+        - not (workstation_device_name | default('') is match('^<'))
+  roles:
+    - workstation_console

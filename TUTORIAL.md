@@ -29,11 +29,50 @@ A new Git revision does not mean it has been applied to this machine.
 
 The setup has four layers: Git/Ansible declares intent, installed systemd units
 schedule work, helpers produce reports, and notifications draw attention to
-some results. A unified management CLI is still planned, not implemented.
+some results. The `workstation` web dashboard brings those local observations
+together; browsing only reads evidence. Selected monitoring jobs can also be
+run manually after reviewing and confirming their effects; failures are never repaired
+automatically.
 
 ## 2. Read existing results before running more checks
 
-These commands only inspect local state:
+If the dashboard is installed, start here:
+
+```fish
+workstation
+```
+
+Open the private browser link printed in the launching terminal. Start with
+Overview for local health, backup/update evidence and attention items. Operations
+provides searchable jobs, state/category filters, report details and journals.
+Refresh rereads existing evidence; it does not run jobs.
+
+Use Dark mode / Light mode in the header to switch themes. Your browser remembers
+the choice; the first visit follows the system preference.
+
+Setup provides forms for supported settings. Edits remain a browser draft until
+you open Changes, review the host-file diff and explicitly confirm saving.
+Preview and apply are separate confirmed steps. Ansible passwords and full
+output stay in the launching terminal; the browser never asks for your password.
+After apply, run the strict audit and verify idempotency. See the
+[dashboard workflow](docs/OPERATIONS.md#web-dashboard) for limits.
+
+To run a supported monitoring check, use Operations → Run check, or open
+View details → Review manual run. Read the effects and confirm. Cancel runs
+nothing. Activity shows the execution result for this dashboard session.
+COMPLETED means the invocation
+finished, not that every monitored item is healthy or a notification arrived.
+Backup uploads/restores, upgrades and service restarts remain unavailable as
+direct job actions; see the [manual-run reference](docs/OPERATIONS.md#manual-job-runs).
+
+Machines distinguishes the current local target from unconnected inventory
+entries. Remote management is deferred. Lifecycle explains installation and
+provider transition workflows; it does not migrate data automatically.
+For text-only inspection, use `workstation --status` or `workstation --json`.
+For a safe visual tour with no host reads or actions, use `workstation --demo`.
+
+If the command is missing, follow [dashboard installation](docs/DEPLOY.md#install-only-the-dashboard).
+You can also inspect the underlying evidence directly:
 
 ```fish
 cat ~/.local/state/workstation-weekly-report/latest.txt
