@@ -23,102 +23,153 @@ check. Compare its date with the source report. A missing report means unknown
 state, not healthy state. A missing helper can mean its role was skipped or the
 latest repository changes have not been deployed.
 
-### Monitoring TUI
+### Web dashboard
 
-After [console-only installation](DEPLOY.md#install-only-the-monitoring-console),
-run `workstation` in a terminal. It reads local reports and batches systemd
-property queries. Browsing, automatic rereads and noninteractive CLI modes only
-inspect evidence. Explicit manual actions can start selected monitoring jobs
-after confirmation, as described below.
-The view rereads evidence every 30 seconds while open (configurable with
-`--interval`, 5–3600 seconds); there is no background daemon or new timer.
+After [dashboard installation](DEPLOY.md#install-only-the-dashboard), run:
 
-| Key / option | Effect |
+```fish
+workstation
+```
+
+Open the private session link printed in that terminal. The on-demand server
+listens only on `127.0.0.1:8765`; `--port NUMBER` selects another port. The session
+link changes on restart and should stay private. No cloud hosting, telemetry,
+external fonts, frontend build or background timer is required. Ctrl+C stops
+the server; it does not undo actions already started. The Textual TUI is removed.
+
+Use the header's **Dark mode / Light mode** button to switch themes. The first
+visit follows your system preference; an explicit choice is saved in browser
+local storage and applied before the page renders. Both themes use stronger
+text/status contrast and visible button boundaries. Eligible monitoring jobs
+also show **Run check** directly in Operations; it opens the same command/effect
+review and does not bypass confirmation.
+
+| Section | Purpose |
 | --- | --- |
-| h / l | Previous / next category tab (wraps at either end) |
-| 1–6 | Switch All / Health / Backup / Updates / Services / Reports tabs |
-| Up/Down or j/k | Select a job; scroll in a report/log view |
-| Space or Enter / `--detail JOB` | Display a saved report and evidence details |
-| L (Shift+l) / `--logs JOB` | Read the selected service's last 40 local journal lines |
-| x / y / n | Review selected manual run / confirm / cancel (Escape also cancels) |
-| a | Show the last manual action result from this console session |
-| r | Reread existing files and unit properties; never refresh the underlying job |
-| ? / Escape / q | Help / overview / quit |
-| `--status` / `--json` | One snapshot as text / schema-versioned JSON, excluding raw reports and logs |
+| Overview | Local machine identity, health/backup/update summaries and attention items |
+| Machines | Current local target and other inventory entries; unconnected entries have no observed health or controls |
+| Setup | Forms for supported backup, development, desktop and notification settings; provider selections are inspection-only |
+| Operations | Search/filter jobs, read saved reports and journals, review supported manual monitoring runs |
+| Changes | Review a host-file diff, save configuration, preview effects, apply and audit |
+| Activity | Running/completed/failed/unknown action outcomes, kept in memory for this server session (up to 50) |
+| Lifecycle | Installation, feature changes, provider transition and recovery guidance |
 
-The interface uses Textual with a styled, scrollable job table, state counts,
-selected-job preview and full report/journal views. Categories filter the table;
-summary counts still cover all jobs. Each category keeps its selected job.
-An empty category shows no selection, and custom report sources appear in
-Reports. Mouse selection, wheel scrolling and clickable footer shortcuts are supported. Tab moves focus;
-PageUp/PageDown and Home/End navigate the focused table or document. Textual
-styles and key bindings live in `create_app()` in the console source. Reports
-are rendered as literal text, including any markup-like content.
+The dashboard manages **only the machine serving it**. Both inventory hosts use
+local execution. Remote management is deferred; run a separate dashboard on
+each workstation. Ordinary browsing rereads local evidence every 30 seconds;
+it does not run checks, refresh baselines, upload, download or repair anything.
+The read-only demo is available with `workstation --demo` and uses only sample
+data, without reading host reports, credentials or inventory.
 
-Job IDs: `health`, `drift`, `backup`, `restore`, `summary`, `updates`,
-`post-update`, `alerts`, `update-alerts`, `sync`, `apt-lists`, `apt-upgrades`.
-Unselected built-in adapters get `other-backup-proton` / `other-backup-rclone`
-and corresponding `other-restore-*` rows, so a skipped provider cannot hide
-leftover enabled timers. These may warn during an intentional parallel migration;
-the console never stops them. Additional report sources get `report-N` IDs,
-listed in JSON.
+#### Configuration workflow
 
-States are HEALTHY, FAILED, STALE, UNKNOWN and DISABLED. Disabled intent with a
-leftover active/enabled schedule is a failure, not a green disabled row. Missing
-configuration, report, post-update baseline or bus access remains unknown.
-Successful inactive oneshot services are not mistaken for stopped daemons.
-Legacy restore timestamps without matching host/provider/dataset history stay
-unknown. Notification rows verify local invocation only, not delivery.
+1. Edit the supported fields in Setup. Draft values stay in browser memory;
+   leaving/reloading the page can discard them.
+2. Open Changes → Review & save. Inspect the exact host-file diff and explicitly
+   confirm. Cancel leaves inventory untouched. Saving changes only
+   `ansible/inventory/host_vars/<host>.yml`, preserving unrelated values,
+   formatting and comments; comments inside a changed list can be replaced.
+   Duplicate YAML keys and anchors/aliases require manual editing. No commit,
+   push or provisioning occurs.
+3. Preview the saved inventory. Review the command and confirm. Continue in
+   the **launching terminal** for sudo and full Ansible output; passwords are
+   never accepted or relayed in the browser.
+4. Review & apply requires a successful preview of unchanged repository inputs
+   in this server session. Each execution has a separate confirmation. Failed
+   or repeated applies require another preview; stop at the first failed task.
+5. Run the strict audit, then another preview/apply to verify idempotency.
 
-Noninteractive exit codes: 0 when all observed items are healthy/disabled;
-1 when any item is failed/stale/unknown or a requested journal cannot be read;
-2 for invalid arguments or an unusable interactive terminal. An unhealthy
-snapshot is useful output, so callers must still consume JSON on exit 1.
+Ansible actions are unavailable when the dashboard lacks an interactive input
+terminal. Browsing and supported monitoring runs remain available. The server
+permits one operation at a time; navigating away does not cancel it. Do not
+start parallel provisioning in another terminal.
 
-The console uses `~/.config/workstation/console.json`, a mode-0600 snapshot of
-intent generated by Ansible. It is not a live comparison against current Git.
-Use `--config PATH` if the configuration directory was overridden. Updating Git
-alone does not update this snapshot. The TUI handles malformed legacy backup
-metadata conservatively; it does not repair the existing writers.
+Supported forms cover backup/restore calendars, backup sources/exclusions,
+backup timer intent, update notifications, Python versions and the GNOME,
+containers, virtualization and languages role switches. Values combine the
+last deployed defaults with host-file overrides, rather than fully resolved
+current inventory; other overrides can take precedence. Inspect the preview.
+Unknown/nonliteral values are not editable in forms. Use `--repo PATH` for a
+checkout outside `~/Projects/ubuntu-workstations`.
 
-Existing helpers still live in `~/.local/bin/`; repository utilities live in
-`scripts/`. Further management actions remain in the
-[roadmap](TODO.md#next-management-cli).
+Disabling a foundation switch skips its role; it does not uninstall packages
+or stop existing services. Health/service lists may need manual changes.
+Provider/profile transitions, component removal and cutovers remain manual
+workflows in [Deploy](DEPLOY.md) and [Migrate](MIGRATE.md). Check mode is not an
+integration or recovery test. Configuration rollback does not automatically
+restore old package versions or provider data.
 
 #### Manual job runs
 
-Select a job and press `x` to review its host, exact command and effects. Press
-`y` to run once; `n` or Escape cancels. Space/Enter only navigate and never
-approve execution. The console rechecks deployed host intent and service state
-immediately before starting a job. Disabled, missing/masked, already running or
-unavailable services are refused. No sudo or interactive authentication is used.
+Open Operations → Details → Review manual run. Read the local target, command
+and effects, then explicitly confirm. Reports/journals are literal text shown
+only on request and may contain private paths. Custom reports cannot introduce
+executable commands. The fixed user-service allowlist includes:
 
-| Job | Effect of an approved run |
+| Job | Effect of a confirmed run |
 | --- | --- |
-| Health | Checks configured local disks/services and replaces the report |
-| Drift | Checks selected files, replaces the report and records observed baseline history; never acknowledges drift or changes the baseline |
-| Weekly summary | Rebuilds the summary from existing reports; does not rerun sources |
-| Update discovery | Uses the deployed service arguments, queries upstream sources/cached APT candidates and replaces its report; installs nothing |
-| Failure notifications | Reads reports, may notify GNOME and updates notification deduplication state |
-| Update notifications | Reads the update report, may notify GNOME and updates notification deduplication state; installs nothing |
+| Health | Checks local disks/services and replaces the report |
+| Drift | Checks selected files, replaces its report and records observed history; does not change the baseline or acknowledge drift |
+| Weekly summary | Rebuilds its summary from existing reports without rerunning source checks |
+| Update discovery | Queries upstream versions/cached APT candidates and replaces its report; installs nothing |
+| Failure/update notifications | Reads reports, may send GNOME notifications and updates deduplication state; does not authorize upgrades |
 
-These are a fixed allowlist of existing **user oneshot services**, executed with
-`systemctl --user --no-ask-password start <service>`. Report-source configuration
-cannot add executable commands. Backup uploads, restore drills, system package
-jobs, post-update validation/baseline changes, Syncthing restarts and custom
-reports remain inspection-only. No schedules or Ansible intent are changed.
+The server rechecks intent, host and unit state immediately before execution.
+Disabled, missing/masked, running or unavailable services are refused. Backup
+uploads, restore drills, system package jobs, Syncthing restarts, baseline
+changes and custom jobs remain inspection-only. Ansible apply can change
+managed services separately, after preview and confirmation.
 
-The UI stays responsive and permits one operation at a time. It shows RUNNING,
-COMPLETED, FAILED, NOT STARTED or OUTCOME UNKNOWN separately from job health,
-then rereads evidence after an action result. `a` reopens the latest action result
-for this session; raw command output is not exported or shown automatically.
-A zero service exit means the invocation completed, not that every monitored
-item is healthy or a notification was delivered. Inspect the report/journal.
+A completed invocation does not certify healthy evidence or notification
+delivery. Systemctl waits up to 120 seconds; a timeout is **unknown**, and the
+systemd job may still run. Inspect its journal before retrying. There is no
+automatic retry, service restart, failure clearing or repair. Session activity
+is not persistent job history; reports and journals are the underlying evidence.
 
-The console waits up to 120 seconds for systemctl. A timeout may leave the
-systemd job running; leaving a view or quitting also does not stop a started
-job. Inspect its journal before retrying. There are no automatic retries,
-service restarts, report acknowledgements or background repair actions.
+#### Evidence and CLI
+
+The dashboard and retained inspection CLI share the same collector. HEALTHY,
+FAILED, STALE, UNKNOWN and DISABLED describe evidence, not action authorization.
+Missing/malformed evidence, unavailable buses and unattributed legacy restore
+records stay unknown. Disabled intent with a leftover enabled schedule fails.
+Successful inactive oneshots are not treated as broken daemons. A timer does
+not prove execution, a successful upload does not prove recovery, and Syncthing
+is not backup. Notification success does not prove desktop delivery.
+
+`~/.config/workstation/console.json` is a mode-0600 Ansible-generated intent
+snapshot, not a live Git-to-host comparison. Use `--config PATH` for an override.
+Updating Git alone does not update this snapshot or the installed dashboard.
+
+```fish
+workstation --status
+workstation --json
+workstation --detail health
+workstation --logs health
+workstation --dashboard --port 8765
+workstation --demo
+```
+
+The first four commands read existing evidence without starting a server.
+Status/JSON exit 0 when all observed items are healthy/disabled, 1 for
+failed/stale/unknown evidence (or unavailable requested journal), and 2 for
+argument/startup errors. Consume JSON even on exit 1. Detail/log arguments are
+job IDs, listed in JSON; there is no CLI mutation command.
+
+The API requires a per-process bearer token and same-origin requests, rejects
+untrusted Host headers, serves only fixed assets, and stores reviews server-side
+for up to ten minutes. Confirmations are single use; stale file/intent reviews
+fail closed. No arbitrary shell execution, LAN binding or password input is
+provided. Treat this as a local user tool, not a hardened multi-user service.
+
+| Symptom | What to check |
+| --- | --- |
+| Old terminal interface or missing assets | Update the reviewed checkout and apply the scoped dashboard playbook on this machine |
+| Connection/session error | Reopen the current private session link from the launching terminal |
+| Port already used | Stop your earlier dashboard or choose another `--port` |
+| Settings unavailable | Inspect the configured repository, intent snapshot and host YAML; redeploy the dashboard if needed |
+| Ansible actions unavailable | Launch `workstation` from an interactive terminal |
+| Wrong host/intent warning | Review local identity and matching inventory entry before redeploying the console snapshot |
+| Manual run refused or failed | Inspect intent, user bus, service activity, report and journal; do not clear failures to hide them |
 
 ## Quick inspection commands
 

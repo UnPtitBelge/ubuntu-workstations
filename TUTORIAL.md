@@ -29,36 +29,49 @@ A new Git revision does not mean it has been applied to this machine.
 
 The setup has four layers: Git/Ansible declares intent, installed systemd units
 schedule work, helpers produce reports, and notifications draw attention to
-some results. The `workstation` TUI brings those local observations together;
-browsing only reads evidence. Selected monitoring jobs can also be run manually
-after reviewing and confirming their effects; failures are never repaired
+some results. The `workstation` web dashboard brings those local observations
+together; browsing only reads evidence. Selected monitoring jobs can also be
+run manually after reviewing and confirming their effects; failures are never repaired
 automatically.
 
 ## 2. Read existing results before running more checks
 
-If the console is installed, start here:
+If the dashboard is installed, start here:
 
 ```fish
 workstation
 ```
 
-Use `h`/`l` for the previous/next tab, or 1–6 for All, Health, Backup, Updates,
-Services and Reports. Use Up/Down
-(or j/k) to select, Space for the saved report (Enter also works), `L` (Shift+l) for the
-selected journal, `r` to reread existing evidence, `?` for help and `q` to quit.
-Rereading never runs a check/upload/restore. For a single noninteractive snapshot use
-`workstation --status` or `workstation --json`. Logs and full reports are shown
-only on request and may contain private paths.
+Open the private browser link printed in the launching terminal. Start with
+Overview for local health, backup/update evidence and attention items. Operations
+provides searchable jobs, state/category filters, report details and journals.
+Refresh rereads existing evidence; it does not run jobs.
 
-To run a supported monitoring job, select it and press `x`. Review the host,
-command and effects, then press `y` to run once or `n`/Escape to cancel. Space
-and Enter never confirm a run. Use `a` for the last action result. Runs can
-replace saved reports; update discovery can query upstreams and notification
-jobs can send desktop alerts. Backup uploads/restores, upgrades, Syncthing and
-post-update baseline changes are not available as TUI actions. See the
-[manual-run reference](docs/OPERATIONS.md#manual-job-runs).
+Use Dark mode / Light mode in the header to switch themes. Your browser remembers
+the choice; the first visit follows the system preference.
 
-If the command is missing, follow [console-only installation](docs/DEPLOY.md#install-only-the-monitoring-console).
+Setup provides forms for supported settings. Edits remain a browser draft until
+you open Changes, review the host-file diff and explicitly confirm saving.
+Preview and apply are separate confirmed steps. Ansible passwords and full
+output stay in the launching terminal; the browser never asks for your password.
+After apply, run the strict audit and verify idempotency. See the
+[dashboard workflow](docs/OPERATIONS.md#web-dashboard) for limits.
+
+To run a supported monitoring check, use Operations → Run check, or open
+View details → Review manual run. Read the effects and confirm. Cancel runs
+nothing. Activity shows the execution result for this dashboard session.
+COMPLETED means the invocation
+finished, not that every monitored item is healthy or a notification arrived.
+Backup uploads/restores, upgrades and service restarts remain unavailable as
+direct job actions; see the [manual-run reference](docs/OPERATIONS.md#manual-job-runs).
+
+Machines distinguishes the current local target from unconnected inventory
+entries. Remote management is deferred. Lifecycle explains installation and
+provider transition workflows; it does not migrate data automatically.
+For text-only inspection, use `workstation --status` or `workstation --json`.
+For a safe visual tour with no host reads or actions, use `workstation --demo`.
+
+If the command is missing, follow [dashboard installation](docs/DEPLOY.md#install-only-the-dashboard).
 You can also inspect the underlying evidence directly:
 
 ```fish

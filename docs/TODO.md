@@ -5,31 +5,40 @@ This file lists open work and acceptance criteria. Current operations live in
 [the archive](archive/ROADMAP-v1.3.0.md). A feature in source is not evidence that
 it is deployed or has passed a real cloud/restore test.
 
-## Next: management CLI
+## Local web dashboard and future CLI
 
-**Implemented in the repository: `workstation`, a TUI with read-only browsing,
-confirmed monitoring-job runs and a read-only status/JSON CLI.** It reuses
-reports and local systemd evidence, with Ansible installation and Fish completion. The Textual UI supports Space to open reports, mouse
-navigation, category tabs and scrollable evidence views. Manual health/drift,
-summary, discovery and notification jobs use a fixed user-service allowlist,
-effect review and explicit confirmation; no new scheduler is introduced.
+`workstation` starts an on-demand loopback web dashboard;
+`--status`, `--json`, `--detail` and `--logs` retain read-only CLI
+inspection. Remote workstation management is deferred.
 
-- [x] Show local host, selected profile/provider intent and installed jobs together, with an explicit distinction between desired and observed state.
-- [x] Summarize health, drift, backup, restore evidence, update discovery and post-update validation with their timestamps and evidence paths.
-- [x] Distinguish healthy, failed, stale, unknown/missing and intentionally disabled/not applicable. Never treat a missing result as success.
-- [x] Show next/last timer execution and the last service outcome; inactive successful oneshot services must not look broken.
-- [x] Tie backup/restore evidence to host, provider and dataset; handle malformed/shared/stale records without false green status.
-- [x] Offer focused detail/log views and explain the next useful action without dumping private data by default.
-- [x] Keep ordinary status inspection read-only and bounded in time. It must not query cloud accounts, refresh baselines, upload, download or repair anything implicitly.
-- [x] Add confirmed manual monitoring-job runs with effect descriptions, fresh intent/service checks, bounded execution and failure/timeout results; keep browsing read-only.
-- [ ] Add backup preview/run and restore-test actions with provider-specific effects and failure propagation; persist configuration changes through Ansible.
-- [ ] Add report search and attention-state filtering within category tabs.
-- [x] Provide useful help, stable JSON output/exit semantics and Fish completion; test missing helpers, unavailable user buses, stale reports and both backup providers without live accounts.
+- [x] Designed browser interface with Overview, Machines, Setup, Operations,
+  Changes, Activity, Lifecycle and orientation views; responsive layouts.
+- [x] Higher-contrast light/dark themes with persistent preference, clear action
+  buttons and direct monitoring-job review from Operations.
+- [x] Dedicated forms for supported backup, development, desktop and notification
+  settings; reviewed host-file diffs and stale-write protection.
+- [x] Confirmed Ansible preview/apply/audit with local identity checks, preview
+  invalidation and terminal-only password handling.
+- [x] Search jobs and filter categories/attention states; inspect reports/journals
+  as literal text without exporting raw bodies in ordinary snapshots.
+- [x] Confirm selected monitoring jobs with fresh intent/unit checks, single-use
+  reviews, single-operation execution and explicit failure/unknown results.
+- [x] Show evidence freshness, next/last schedules and last service results;
+  distinguish desired intent, observation, missing data and disabled features.
+- [x] Per-process local session, loopback/Host/origin restrictions, bounded API
+  requests, fixed static assets and no arbitrary browser-supplied commands.
+- [x] Read-only synthetic demo; isolated API, collector and Ansible role tests.
+- [ ] Fully resolved inventory/provenance and richer version policy editors.
+- [ ] Backup action correctness prerequisites below, then confirmed backup
+  preview/upload/restore and reviewed update installation workflows.
+- [ ] Profile/provider transition planning and explicit component disable/remove
+  workflows with separate cutover/decommission approval.
+- [ ] Expand the easy-to-use CLI after the browser workflows settle; keep
+  existing status/JSON semantics stable.
 
-The [operations guide](OPERATIONS.md#monitoring-tui) documents the implemented
-interface, exit codes and evidence limits. Console tests use synthetic data,
-including real terminal navigation and an isolated idempotent role install;
-they do not certify live host health or cloud recovery.
+The [operations guide](OPERATIONS.md#web-dashboard) documents implemented
+behavior and evidence limits. Browser verification uses synthetic data and
+fake executors; it does not prove real provisioning, cloud backup or recovery.
 
 ## Correctness before more automation
 

@@ -1,5 +1,5 @@
 ---
-# No daemon or timer; Textual is supplied by Ubuntu rather than global pip.
+# On-demand loopback web server; no daemon, timer or frontend build toolchain.
 workstation_console_enabled: true
 workstation_console_install_dependencies: true
 workstation_console_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/workstation"

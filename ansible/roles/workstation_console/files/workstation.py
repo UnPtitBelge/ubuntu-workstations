@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Local workstation dashboard with inspection and confirmed monitoring job runs."""
+"""Local workstation dashboard with reviewed setup changes and monitoring actions."""
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+import difflib
+import hashlib
 from datetime import datetime, timezone
 import json
 import math
@@ -90,6 +91,8 @@ def load_config(path):
         for key in ('capabilities', 'providers', 'thresholds'):
             if not isinstance(config.get(key), dict):
                 raise ValueError(f'invalid {key}')
+        if not isinstance(config.get('settings', {}), dict):
+            raise ValueError('invalid setup settings')
         if not isinstance(config.get('reports'), list) or len(config['reports']) > 32:
             raise ValueError('invalid report sources')
         for value in config['thresholds'].values():
@@ -406,8 +409,6 @@ RUNNABLE = {
     'alerts': ('workstation-desktop-alerts.service', 'Reads saved reports and may send GNOME notifications and update notification deduplication state. Requires a graphical session for delivery.'),
     'update-alerts': ('workstation-tool-update-alerts.service', 'Reads the update report and may send GNOME notifications and update notification deduplication state. Installs nothing.'),
 }
-CATEGORIES = (('all', 'All'), ('health', 'Health'), ('backup', 'Backup'),
-              ('updates', 'Updates'), ('services', 'Services'), ('reports', 'Reports'))
 
 
 def category_for(row):
@@ -471,331 +472,194 @@ def run_job(collector, confirmed_plan, runner=run_service):
     return 'COMPLETED: ' + plan['service'] + '. The service invocation finished; inspect the reread evidence for the job outcome. This does not prove notification delivery.'
 
 
-def create_app(collector, interval, action_runner=run_service):
-    """Lazy UI imports keep the status/JSON CLI usable without Textual."""
-    from textual.app import App, ComposeResult
-    from textual.binding import Binding
-    from textual.containers import VerticalScroll
-    from textual.widgets import DataTable, Footer, Header, Static, Tab, Tabs
-    from rich.text import Text
-
-    class ConsoleApp(App):
-        TITLE = 'Workstation'
-        ENABLE_COMMAND_PALETTE = False
-        CSS = '''
-        Screen { background: $surface; }
-        #identity { height: auto; padding: 1 2; background: $panel; }
-        #summary { height: auto; padding: 0 2; color: $accent; }
-        #categories { margin: 0 2; }
-        #action-status { height: auto; max-height: 3; padding: 0 2; color: $warning; }
-        #jobs { height: 1fr; margin: 1 2 0 2; border: round $primary; }
-        #preview { height: 6; padding: 0 2; border-top: solid $primary; }
-        #reader { height: 1fr; margin: 1 2; border: round $primary; display: none; }
-        #document { height: auto; padding: 1 2; }
-        #notice { height: auto; padding: 0 2; color: $text-muted; }
-        .reading #jobs, .reading #preview { display: none; }
-        .reading #reader { display: block; }
-        .compact #identity { height: 1; padding: 0 1; }
-        .compact #summary { height: 1; padding: 0 1; }
-        .compact #jobs, .compact #reader { margin: 0; }
-        .compact #preview { height: 3; padding: 0 1; }
-        .tiny #preview, .tiny #notice, .tiny #summary { display: none; }
-        '''
-        BINDINGS = [
-            Binding('space', 'open_report', 'Open report', priority=True),
-            Binding('enter', 'open_report', 'Open report', show=False, priority=True),
-            Binding('escape', 'overview', 'Back', priority=True),
-            Binding('h', 'cycle_category(-1)', 'Previous tab'),
-            Binding('l', 'cycle_category(1)', 'Next tab'),
-            Binding('L', 'logs', 'Journal'), Binding('r', 'reread', 'Reread'),
-            Binding('x', 'run_job', 'Run job'), Binding('a', 'action_result', 'Last action'),
-            Binding('y', 'confirm_run', show=False), Binding('n', 'cancel_run', show=False),
-            *[Binding(str(i), f'category({i - 1})', show=False) for i in range(1, 7)],
-            Binding('?', 'help', 'Help'), Binding('q', 'quit', 'Quit', priority=True),
-            Binding('j', 'move(1)', show=False), Binding('k', 'move(-1)', show=False),
-        ]
-
-        def __init__(self):
-            super().__init__()
-            self.snapshot = None
-            self.mode = 'overview'
-            self.busy = False
-            self.request = 0
-            self.category = 'all'
-            self.visible_jobs = []
-            self.tab_selection = {}
-            self.confirmed_plan = None
-            self.last_action = 'No job has been run from this console session.'
-
-        def compose(self) -> ComposeResult:
-            yield Header()
-            yield Static('Reading local evidence…', id='identity', markup=False)
-            yield Static('', id='summary', markup=False)
-            yield Tabs(*(Tab(f'{i} {label}', id=key) for i, (key, label) in enumerate(CATEGORIES, 1)), id='categories')
-            yield DataTable(id='jobs', cursor_type='row', zebra_stripes=True)
-            yield Static('Select a job, then press Space to open its report.', id='preview', markup=False)
-            with VerticalScroll(id='reader', can_focus=True):
-                yield Static('', id='document', markup=False)
-            yield Static('', id='action-status', markup=False)
-            yield Static('Inspection • x reviews a manual run • r only rereads evidence', id='notice', markup=False)
-            yield Footer()
-
-        def on_mount(self):
-            table = self.query_one(DataTable)
-            table.add_columns('Job', 'State', 'Evidence age', 'Service')
-            table.focus()
-            self.executor = ThreadPoolExecutor(max_workers=1)
-            self.pending = None
-            self.last_read = time.monotonic()
-            self.set_interval(0.1, self.poll)
-            self.action_reread()
-
-        def on_unmount(self):
-            self.executor.shutdown(wait=False, cancel_futures=True)
-
-        def on_resize(self, event):
-            self.screen.set_class(event.size.height < 30 or event.size.width < 80, 'compact')
-            self.screen.set_class(event.size.height < 18, 'tiny')
-
-        def selected(self):
-            if self.visible_jobs:
-                index = min(self.query_one(DataTable).cursor_row, len(self.visible_jobs) - 1)
-                return self.visible_jobs[index]
-            return None
-
-        def poll(self):
-            if self.pending and self.pending[0].done():
-                future, kind, request = self.pending
-                self.pending, self.busy = None, False
-                try:
-                    result = future.result()
-                except Exception as exc:
-                    self.query_one('#notice', Static).update(f'Cannot read evidence ({type(exc).__name__}); press r to retry.')
-                    if kind == 'run':
-                        self.last_action = f'OUTCOME UNKNOWN: action worker failed ({type(exc).__name__}). Inspect the service journal before retrying.'
-                        self.query_one('#action-status', Static).update(self.last_action)
-                        if self.mode == 'action':
-                            self.query_one('#document', Static).update(self.last_action)
-                    self.last_read = time.monotonic()
-                    return
-                self.query_one('#notice', Static).update('Inspection • x reviews a manual run • r only rereads evidence')
-                if kind == 'snapshot':
-                    self.apply_snapshot(result)
-                    self.last_read = time.monotonic()
-                elif kind == 'run':
-                    self.last_action = clean(result)
-                    self.query_one('#action-status', Static).update(self.last_action)
-                    if self.mode == 'action':
-                        self.query_one('#document', Static).update(self.last_action)
-                    self.action_reread()
-                elif self.mode == 'logs' and request == self.request:
-                    self.query_one('#document', Static).update(clean(result))
-            if not self.busy and self.mode != 'confirm' and time.monotonic() - self.last_read >= interval:
-                self.action_reread()
-
-        def apply_snapshot(self, snapshot):
-            previous = self.selected()
-            self.snapshot = snapshot
-            self.populate_jobs(previous['id'] if previous else None)
-            identity = f"{snapshot['host']}  /  {snapshot['profile']}  /  {snapshot['overall']}\n"
-            identity += '  '.join(f'{k}={v}' for k, v in snapshot['providers'].items())
-            self.query_one('#identity', Static).update(clean(identity))
-            counts = '   '.join(f'{state}: {sum(row["state"] == state for row in snapshot["jobs"])}'
-                                for state in ('FAILED', 'STALE', 'UNKNOWN', 'HEALTHY', 'DISABLED'))
-            self.query_one('#summary', Static).update(counts + '\nObserved: ' + clean(snapshot['observed_at'])
-                                                    + ('\n' + clean(snapshot['config_warning']) if snapshot['config_warning'] else ''))
-            self.update_preview()
-            if self.mode == 'report' and self.selected():
-                row = self.selected()
-                self.query_one('#document', Static).update(clean(
-                    details(row, collector.reports.get(row['id'], 'No saved report.'))))
-
-        def populate_jobs(self, selected_id=None):
-            table = self.query_one(DataTable)
-            self.visible_jobs = [row for row in self.snapshot['jobs']
-                                 if self.category == 'all' or category_for(row) == self.category]
-            table.clear()
-            colors = {'HEALTHY': 'green', 'FAILED': 'red', 'STALE': 'yellow', 'UNKNOWN': 'yellow', 'DISABLED': 'dim'}
-            for row in self.visible_jobs:
-                table.add_row(Text(clean(row['label'])), Text(row['state'], style=colors[row['state']]),
-                              Text(age_label(row['age_hours'])), Text(clean(row['activity'])), key=row['id'])
-            if selected_id:
-                index = next((i for i, row in enumerate(self.visible_jobs) if row['id'] == selected_id), 0)
-                table.move_cursor(row=index)
-            self.update_preview()
-
-        def action_category(self, index):
-            if self.mode != 'confirm':
-                self.query_one(Tabs).active = CATEGORIES[index][0]
-
-        def action_cycle_category(self, change):
-            index = next(i for i, (key, _) in enumerate(CATEGORIES) if key == self.category)
-            self.action_category((index + change) % len(CATEGORIES))
-
-        def on_tabs_tab_activated(self, event):
-            row = self.selected()
-            if row:
-                self.tab_selection[self.category] = row['id']
-            self.category = event.tab.id
-            self.action_overview()
-            if self.snapshot:
-                self.populate_jobs(self.tab_selection.get(self.category))
-
-        def update_preview(self):
-            self.query_one('#preview', Static).update('No jobs in this category.')
-            row = self.selected()
-            if row:
-                self.query_one('#preview', Static).update(clean('\n'.join([
-                    row['label'] + ' • ' + row['state'], '; '.join(row['reasons']),
-                    'Last trigger: ' + row['last_trigger'], 'Next run: ' + row['next_run'],
-                    'x: review manual run' if row['id'] in RUNNABLE else 'Inspection only; no manual run available'])))
-
-        def on_data_table_row_highlighted(self, event):
-            self.update_preview()
-
-        def on_data_table_row_selected(self, event):
-            self.action_open_report()
-
-        def show_document(self, mode, title, content):
-            self.request += 1
-            self.mode = mode
-            self.screen.add_class('reading')
-            reader = self.query_one('#reader', VerticalScroll)
-            reader.border_title = Text(clean(title))
-            self.query_one('#document', Static).update(clean(content))
-            reader.scroll_home(animate=False)
-            reader.focus()
-
-        def action_open_report(self):
-            if self.mode == 'confirm':
-                return
-            if isinstance(self.focused, Tabs):
-                self.query_one(DataTable).focus()
-                return
-            row = self.selected()
-            if row:
-                self.show_document('report', row['label'] + ' / saved report',
-                                   details(row, collector.reports.get(row['id'], 'No saved report.')))
-
-        def action_overview(self):
-            self.confirmed_plan = None
-            self.request += 1
-            self.mode = 'overview'
-            self.screen.remove_class('reading')
-            self.query_one(DataTable).focus()
-
-        def action_logs(self):
-            row = self.selected()
-            if row and not self.busy:
-                self.show_document('logs', row['label'] + ' / local journal', 'Reading selected local journal…')
-                self.busy = True
-                self.pending = (self.executor.submit(collector.logs, row), 'logs', self.request)
-
-        def action_reread(self):
-            if not self.busy:
-                self.busy = True
-                self.query_one('#notice', Static).update('Reading local evidence…')
-                self.pending = (self.executor.submit(collector.snapshot), 'snapshot', self.request)
-
-        def action_run_job(self):
-            if self.busy:
-                self.notify('Wait for the current operation to finish.')
-                return
-            row = self.selected()
-            if not row:
-                return
-            try:
-                plan = action_plan(self.snapshot, row['id'])
-            except ValueError as exc:
-                self.notify(str(exc), severity='warning')
-                return
-            self.confirmed_plan = plan
-            self.show_document('confirm', 'Review manual job run', '\n'.join([
-                'Host: ' + plan['host'], 'Job: ' + plan['label'],
-                'Command: ' + ' '.join(plan['command']), '', plan['effect'], '',
-                'Existing reports may be replaced. Read failures before running again.',
-                'Scheduling and Ansible configuration will remain unchanged.', '',
-                'Press y to run once. Press n or Escape to cancel.',
-                'Space/Enter does not confirm execution.']))
-
-        def action_confirm_run(self):
-            if self.mode != 'confirm' or self.busy or self.confirmed_plan is None:
-                return
-            plan, self.confirmed_plan = self.confirmed_plan, None
-            self.show_document('action', 'Manual job execution', 'Running ' + plan['service'] + '…')
-            self.last_action = 'RUNNING: ' + plan['service'] + '. Leaving this view or quitting does not stop a started systemd job.'
-            self.query_one('#action-status', Static).update(self.last_action)
-            self.busy = True
-            self.pending = (self.executor.submit(run_job, collector, plan, action_runner), 'run', self.request)
-
-        def action_cancel_run(self):
-            if self.mode == 'confirm':
-                self.action_overview()
-
-        def action_action_result(self):
-            self.show_document('action', 'Last manual action', self.last_action)
-
-        def action_help(self):
-            self.show_document('help', 'Keys and evidence', HELP)
-
-        def action_move(self, change):
-            if self.mode == 'overview':
-                table = self.query_one(DataTable)
-                if table.row_count:
-                    table.move_cursor(row=(table.cursor_row + change) % table.row_count)
-            else:
-                reader = self.query_one('#reader', VerticalScroll)
-                reader.scroll_relative(y=change, animate=False)
-
-    return ConsoleApp()
+EDITABLE = {
+    'workstation_backup_on_calendar': str,
+    'workstation_backup_restore_test_calendar': str,
+    'workstation_backup_sources': list,
+    'workstation_backup_excludes': list,
+    'workstation_backup_timer_enabled': bool,
+    'workstation_tool_update_alerts_enabled': bool,
+    'workstation_python_versions': list,
+    'workstation_role_gnome': bool,
+    'workstation_role_containers': bool,
+    'workstation_role_virtualization': bool,
+    'workstation_role_languages': bool,
+}
 
 
-HELP = '''Navigation
-  h/l: previous/next tab (wraps). 1–6: select a category directly.
-  Space or Enter: open the selected saved report.
-  Up/Down or j/k: select a job; scroll in a report/journal.
-  Mouse: select jobs, scroll, or click footer actions. Tab: change focus.
-  PageUp/PageDown, Home/End: navigate long tables and documents.
-  L (Shift+l): read the selected service's last 40 journal lines (may contain private data).
-  r: reread files and systemd properties; never runs a check/upload/restore.
-  x: review a supported manual run. y confirms; n/Escape cancels.
-  a: last manual action result. Escape: overview. q: quit. ?: help.
+class SetupManager:
+    """Reviewable host-file edits and an interactive Ansible execution boundary."""
+    def __init__(self, collector, repo=None):
+        self.collector = collector
+        self.repo = Path(repo or collector.home / 'Projects/ubuntu-workstations').resolve()
+        self.preview_token = None
 
-Evidence
-  HEALTHY: available local checks passed; read their scope/limitations.
-  FAILED: a report, service outcome or desired/observed schedule disagrees.
-  STALE: evidence is older than its configured freshness threshold.
-  UNKNOWN: evidence, attribution, baseline/configuration or user bus is unavailable.
-  DISABLED: not selected/scheduled and no conflicting schedule observed.
+    def context(self):
+        config, warning = load_config(self.collector.config_path)
+        if warning or config.get('hostname') not in (self.collector.host, self.collector.host.split('.')[0]):
+            raise ValueError('Trusted local console intent is required. Reinstall the console for this machine.')
+        host = config['inventory_host']
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', host):
+            raise ValueError('Invalid local inventory target.')
+        if not (self.repo / 'ansible/playbooks/workstation.yml').is_file():
+            raise ValueError('Repository unavailable. Start with --repo /path/to/ubuntu-workstations.')
+        target = self.repo / 'ansible/inventory/host_vars' / (host + '.yml')
+        if target.is_symlink() or not target.resolve().is_relative_to(self.repo):
+            raise ValueError('Host configuration must be a regular file inside the repository.')
+        return config, target
 
-Browsing and rereading remain read-only. Only x followed by y starts a job.
-Manual runs can replace reports, query upstreams or send notifications as shown.
-Backup uploads/restores, upgrades, service restarts and custom jobs are unavailable.
-A started systemd job continues if you leave the view or quit.
-Reports and logs appear locally only on request; no uploads/exports.
-Inactive oneshot services can be successful. A schedule alone is not execution.
-Legacy restore metadata without host/dataset attribution stays UNKNOWN.
-This interface cannot prove recoverability or notification delivery.
-Configuration comes from the last console deployment, not live Git inventory.
-'''
+    def document(self, target):
+        import yaml
+        class UniqueLoader(yaml.SafeLoader):
+            def construct_mapping(self, node, deep=False):
+                self.flatten_mapping(node)
+                keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+                if not all(isinstance(key, str) for key in keys) or len(keys) != len(set(keys)):
+                    raise ValueError('Configuration has duplicate or non-string YAML keys; edit it manually.')
+                return super().construct_mapping(node, deep)
+        text, _ = read_local(target)
+        try:
+            data = yaml.load(text, Loader=UniqueLoader)
+        except yaml.YAMLError as exc:
+            raise ValueError('Host configuration is invalid YAML; fix it manually before editing.') from exc
+        if not isinstance(data, dict):
+            raise ValueError('Host configuration must be a YAML mapping.')
+        return text, data
 
+    def settings(self):
+        config, target = self.context()
+        _, data = self.document(target)
+        effective = dict(config.get('settings', {}))
+        effective.update({key: value for key, value in data.items() if key in EDITABLE})
+        return {key: effective[key] for key in EDITABLE if key in effective}
 
-def tui(collector, interval):
-    create_app(collector, interval).run()
+    def propose(self, edited):
+        import yaml
+        if not isinstance(edited, dict) or set(edited) - EDITABLE.keys():
+            raise ValueError('Use only the supported setting names shown in the editor.')
+        for key, value in edited.items():
+            if type(value) is not EDITABLE[key]:
+                raise ValueError(key + ' has the wrong value type.')
+            values = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+            if len(values) > 256 or any(not isinstance(item, str) or not item.strip() or
+                                      len(item) > 4096 or any(c in item for c in ('\x00', '\n', '\r', '{{', '{%'))
+                                      for item in values):
+                raise ValueError(key + ' requires plain, nonempty strings without templates.')
+        config, target = self.context()
+        before, data = self.document(target)
+        if 'workstation_device_name' in data:
+            raise ValueError('Move machine identity to the documented local identity file before editing here.')
+        current = self.settings()
+        updates = {key: value for key, value in edited.items() if current.get(key) != value}
+        # Replace only changed value spans; retain unrelated comments/formatting.
+        # Anchors can couple otherwise unrelated settings, so require manual edits.
+        if any(isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken)) for token in yaml.scan(before)):
+            raise ValueError('YAML anchors/aliases require manual editing.')
+        node = yaml.compose(before)
+        spans, additions = [], dict(updates)
+        for key_node, value_node in node.value:
+            key = key_node.value
+            if key in updates:
+                value = yaml.safe_dump(updates[key], default_flow_style=True, width=4096,
+                                       allow_unicode=True).strip().removesuffix('\n...')
+                end = value_node.end_mark.index
+                if isinstance(value_node, yaml.SequenceNode) and not value_node.flow_style and value_node.value:
+                    end = value_node.value[-1].end_mark.index
+                old = before[value_node.start_mark.index:end]
+                if old.endswith('\n'):
+                    value += '\n'
+                spans.append((value_node.start_mark.index, end, value))
+                additions.pop(key)
+        after = before
+        for start, end, value in sorted(spans, reverse=True):
+            after = after[:start] + value + after[end:]
+        if additions:
+            after += ('' if after.endswith('\n') else '\n') + yaml.safe_dump(additions, sort_keys=False)
+        expected = {**data, **updates}
+        if len(after.encode()) > LIMIT or yaml.safe_load(after) != expected:
+            raise ValueError('Cannot safely represent this edit. Edit the inventory manually.')
+        diff = ''.join(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                                           fromfile=str(target), tofile=str(target)))
+        return dict(host=config['inventory_host'], path=target, before=before, after=after, diff=diff)
+
+    def save(self, plan):
+        config, target = self.context()
+        if target != plan['path'] or config['inventory_host'] != plan['host'] or read_local(target)[0] != plan['before']:
+            raise ValueError('Configuration changed during review. Edit and review it again.')
+        # Exclusive lock prevents concurrent console writers; atomic replacement
+        # preserves the old file if writing fails. No other inventory file changes.
+        temporary = target.with_name(target.name + '.console-tmp')
+        created = False
+        try:
+            with temporary.open('x', encoding='utf-8') as stream:
+                created = True
+                if read_local(target)[0] != plan['before']:
+                    raise ValueError('Configuration changed during review. Edit and review it again.')
+                os.chmod(temporary, target.stat().st_mode & 0o777)
+                stream.write(plan['after'])
+            os.replace(temporary, target)
+        except Exception:
+            if created and temporary.exists():
+                temporary.unlink()
+            raise
+        self.preview_token = None
+
+    def fingerprint(self):
+        digest = hashlib.sha256()
+        for folder in ('ansible', 'profiles', 'scripts', 'dotfiles', 'assets'):
+            for path in sorted((self.repo / folder).rglob('*')):
+                if path.is_file() and '__pycache__' not in path.parts and not path.name.endswith('.pyc'):
+                    digest.update(str(path.relative_to(self.repo)).encode())
+                    digest.update(path.read_bytes())
+        return digest.hexdigest()
+
+    def command(self, operation):
+        config, _ = self.context()
+        # Read inventory afresh without displaying potentially private variables.
+        rc, out, _ = self.collector.runner(['ansible-inventory', '--playbook-dir', str(self.repo / 'ansible'),
+            '-i', str(self.repo / 'ansible/inventory/hosts.yml'), '--host', config['inventory_host']])
+        try:
+            intent = json.loads(out)
+        except ValueError:
+            intent = {}
+        if rc or not isinstance(intent, dict) or intent.get('ansible_connection') != 'local':
+            raise ValueError('Cannot verify a local inventory connection; no Ansible action started.')
+        identity = intent.get('workstation_device_name', '')
+        if not isinstance(identity, str):
+            raise ValueError('Invalid declared machine identity.')
+        if identity and not identity.startswith('<') and identity not in (self.collector.host, self.collector.host.split('.')[0]):
+            raise ValueError('Inventory identity does not match this machine.')
+        if operation not in ('preview', 'apply', 'audit'):
+            raise ValueError('Unsupported Ansible action.')
+        if operation == 'apply' and self.preview_token != self.fingerprint():
+            raise ValueError('A successful preview of the current repository is required before apply.')
+        play = 'validate-workstation.yml' if operation == 'audit' else 'workstation.yml'
+        args = ['ansible-playbook', '-i', 'inventory/hosts.yml', 'playbooks/' + play,
+                '--limit', config['inventory_host'], '-K']
+        if operation == 'preview':
+            args.extend(['--check', '--diff'])
+        if operation == 'audit':
+            args.extend(['-e', 'audit_enforce=true'])
+        return args
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, help='Deployed console JSON (default: ~/.config/workstation/console.json)')
+    parser.add_argument('--repo', type=Path, help='Configuration repository (default: ~/Projects/ubuntu-workstations)')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--status', action='store_true', help='Print a local status snapshot')
     mode.add_argument('--json', action='store_true', help='Print schema-versioned status; excludes raw report bodies/logs')
     mode.add_argument('--detail', metavar='JOB', help='Print one job and its existing report; may show private paths')
     mode.add_argument('--logs', metavar='JOB', help='Print last 40 selected service journal lines; may show private data')
-    parser.add_argument('--interval', type=int, default=30, help='TUI local observation interval in seconds (5–3600; default: 30)')
+    mode.add_argument('--dashboard', action='store_true', help='Serve the local web dashboard (default)')
+    parser.add_argument('--port', type=int, default=8765, help='Loopback dashboard port (default: 8765)')
+    parser.add_argument('--demo', action='store_true', help='Dashboard with sample data; no host reads or actions')
     args = parser.parse_args(argv)
-    if not 5 <= args.interval <= 3600:
-        parser.error('--interval must be between 5 and 3600')
+    if not 0 <= args.port <= 65535:
+        parser.error('--port must be between 0 and 65535')
+    if args.demo and any((args.status, args.json, args.detail, args.logs)):
+        parser.error('--demo is only available for the dashboard')
     collector = Collector(args.config)
     if any((args.status, args.json, args.detail, args.logs)):
         snapshot = collector.snapshot()
@@ -809,18 +673,24 @@ def main(argv=None):
         else:
             print(text_status(snapshot))
         return 0 if snapshot['overall'] in ('HEALTHY', 'DISABLED') and not collector.log_error else 1
-    if not sys.stdin.isatty() or not sys.stdout.isatty() or os.environ.get('TERM', '') in ('', 'dumb'):
-        parser.exit(2, 'An interactive terminal is required. Use --status or --json for noninteractive output.\n')
+    import importlib.util
+    source_assets = Path(__file__).resolve().parent / 'web'
+    assets = source_assets if source_assets.is_dir() else Path.home() / '.local/share/workstation/web'
     try:
-        tui(collector, args.interval)
-    except ModuleNotFoundError as exc:
-        if exc.name == 'textual':
-            parser.exit(2, 'Textual is required for the TUI; install python3-textual through the console role. Use --status or --json meanwhile.\n')
-        raise
+        spec = importlib.util.spec_from_file_location('workstation_web', assets / 'server.py')
+        web = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(web)
+        backend = sys.modules.get(__name__)
+        if backend is None:
+            # main() is also exercised through importlib by repository tests.
+            from types import SimpleNamespace
+            backend = SimpleNamespace(**globals())
+        web.serve(backend, collector, SetupManager(collector, args.repo), assets, args.port, args.demo)
     except KeyboardInterrupt:
         return 0
-    except Exception as exc:
-        parser.exit(2, f'Terminal interface unavailable ({type(exc).__name__}); use --status.\n')
+    except (OSError, ImportError) as exc:
+        parser.exit(2, f'Dashboard unavailable ({type(exc).__name__}): {exc}. Use --status meanwhile.\n')
+
     return 0
 
 

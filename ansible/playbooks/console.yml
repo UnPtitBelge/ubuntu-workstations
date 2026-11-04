@@ -1,7 +1,7 @@
 ---
-# Installs only the monitoring UI/configuration/completion for the local user.
+# Installs only the local dashboard/configuration/completion for the local user.
 # Never starts jobs, changes package policy or provisions other workstation roles.
-- name: Install workstation monitoring console only
+- name: Install workstation web dashboard only
   hosts: workstations
   gather_facts: true
   become: false

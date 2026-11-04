@@ -5,10 +5,33 @@ setup includes GNOME, Fish/Ghostty, development tools, Docker, virtualization,
 Syncthing, Proton applications, cloud backups and maintenance jobs.
 
 **Start with [TUTORIAL.md](TUTORIAL.md)** for a walkthrough of an existing setup
-or a first installation. `workstation` opens the local monitoring TUI with
-category tabs and confirmed manual runs for selected monitoring jobs;
-`workstation --status` prints a snapshot and `workstation --json` exposes the same
-evidence to scripts. See [console installation](docs/DEPLOY.md#install-only-the-monitoring-console).
+or a first installation. `workstation` serves a local web dashboard: open the
+private browser link printed in your terminal. Overview summarizes evidence;
+Setup offers forms and reviewed inventory changes; Operations provides job
+inspection and confirmed monitoring runs. Changes guides Ansible preview/apply,
+and Activity records session outcomes. Light and dark themes keep text and
+actions clear; the theme switch remembers your choice.
+`workstation --status` and `workstation --json` retain lightweight CLI inspection.
+See [dashboard usage](docs/OPERATIONS.md#web-dashboard) and
+[installation](docs/DEPLOY.md#install-only-the-dashboard).
+
+## Dashboard
+
+After installation, run `workstation` and open the private browser link printed
+in its terminal. Keep that terminal open for the server and any confirmed
+Ansible actions; passwords and full Ansible output stay there.
+
+To try the interface from a checkout without reading or changing host state:
+
+```fish
+python3 ansible/roles/workstation_console/files/workstation.py --demo
+```
+
+The dashboard listens only on loopback and manages the machine serving it.
+Other inventory entries are shown as unconnected; remote management is deferred.
+Browsing is read-only. Configuration saves and supported job runs require a
+separate review and confirmation. The lightweight CLI remains available through
+`workstation --status`, `--json`, `--detail JOB` and `--logs JOB`.
 
 ## Documentation
 
@@ -19,7 +42,7 @@ evidence to scripts. See [console installation](docs/DEPLOY.md#install-only-the-
 | [Deploy](docs/DEPLOY.md) | Apply configuration, choose profiles, manage identity and stop selected providers |
 | [Providers](docs/PROVIDERS.md) | Available adapters and selection reference |
 | [Migration](docs/MIGRATE.md) | Transfer data, verify a replacement, plan cutover and rollback |
-| [Roadmap](docs/TODO.md) | Open work and the proposed CLI |
+| [Roadmap](docs/TODO.md) | Dashboard priorities, open work and future CLI expansion |
 | [Contributing](CONTRIBUTING.md) | Repository validation and implementation rules |
 
 [Archived records](docs/archive/README.md) retain previous release evidence and

@@ -97,6 +97,76 @@ class ConsoleTests(unittest.TestCase):
     def rows(self):
         return {row['id']: row for row in self.collector.snapshot()['jobs']}
 
+    def setup_manager(self):
+        repo = self.home / 'repo'
+        target = repo / 'ansible/inventory/host_vars/desktop.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('# Keep unrelated settings\nworkstation_backup_timer_enabled: true\nworkstation_custom_value: preserved\n')
+        play = repo / 'ansible/playbooks/workstation.yml'
+        play.parent.mkdir()
+        play.write_text('---\n[]\n')
+        return console.SetupManager(self.collector, repo), target
+
+    def test_setup_edit_review_save_and_stale_write_protection(self):
+        import yaml
+        manager, target = self.setup_manager()
+        original = target.read_text()
+        plan = manager.propose({'workstation_backup_timer_enabled': False})
+        self.assertEqual(target.read_text(), original)
+        self.assertIn('-workstation_backup_timer_enabled: true', plan['diff'])
+        manager.save(plan)
+        self.assertIn('# Keep unrelated settings', target.read_text())
+        self.assertEqual(yaml.safe_load(target.read_text()),
+                         dict(workstation_backup_timer_enabled=False, workstation_custom_value='preserved'))
+        with self.assertRaisesRegex(ValueError, 'changed during review'):
+            manager.save(plan)
+        target.write_text('# coverage\nworkstation_backup_sources:\n  - /old\n  - /other\n'
+                          '# unrelated comment\nworkstation_custom_value: preserved\n')
+        manager.save(manager.propose({'workstation_backup_sources': ['/new']}))
+        self.assertEqual(yaml.safe_load(target.read_text())['workstation_backup_sources'], ['/new'])
+        self.assertIn('# unrelated comment', target.read_text())
+        self.config['settings'] = {'workstation_python_versions': ['3.14.0']}
+        self.write_config()
+        plan = manager.propose({'workstation_python_versions': ['3.14.0']})
+        self.assertEqual(plan['diff'], '')  # Do not pin unchanged deployed defaults.
+        for edits in ({'ansible_connection': 'ssh'}, {'workstation_backup_timer_enabled': 'false'},
+                      {'workstation_backup_sources': ['{{ lookup("pipe", "bad") }}']},
+                      {'workstation_python_versions': [3.14]}):
+            with self.assertRaises(ValueError):
+                manager.propose(edits)
+        target.write_text('workstation_backup_timer_enabled: true\nworkstation_backup_timer_enabled: false\n')
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            manager.settings()
+        target.write_text('invalid: [\n')
+        with self.assertRaisesRegex(ValueError, 'invalid YAML'):
+            manager.settings()
+        target.unlink()
+        target.symlink_to(self.config_path)
+        with self.assertRaisesRegex(ValueError, 'regular file'):
+            manager.settings()
+
+    def test_setup_apply_requires_preview_and_local_identity(self):
+        manager, target = self.setup_manager()
+        intent = dict(ansible_connection='local', workstation_device_name='test-host')
+        self.collector.runner = lambda argv: (0, json.dumps(intent), '')
+        with self.assertRaisesRegex(ValueError, 'successful preview'):
+            manager.command('apply')
+        preview = manager.command('preview')
+        self.assertIn('--check', preview)
+        self.assertEqual(preview[preview.index('--limit') + 1], 'desktop')
+        manager.preview_token = manager.fingerprint()
+        self.assertNotIn('--check', manager.command('apply'))
+        target.write_text(target.read_text() + '\n# concurrent edit\n')
+        with self.assertRaisesRegex(ValueError, 'successful preview'):
+            manager.command('apply')
+        intent['ansible_connection'] = 'ssh'
+        with self.assertRaisesRegex(ValueError, 'local inventory'):
+            manager.command('preview')
+        intent.update(ansible_connection='local', workstation_device_name='other-host')
+        with self.assertRaisesRegex(ValueError, 'does not match'):
+            manager.command('preview')
+
+
     def test_healthy_oneshot_and_no_mutations(self):
         before = {str(path): (path.read_bytes(), path.stat().st_mtime_ns) for path in self.home.rglob('*') if path.is_file()}
         snapshot = self.collector.snapshot()
@@ -266,135 +336,6 @@ class ConsoleTests(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn('timed out', err)
 
-    def test_noninteractive_launch_has_actionable_error(self):
-        result = subprocess.run([sys.executable, str(SOURCE)], stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                env={**os.environ, 'TERM': 'dumb'}, timeout=10)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('--status', result.stderr)
-
-    def test_real_terminal_navigation_and_clean_exit(self):
-        import fcntl
-        import pty
-        import select
-        import struct
-        import termios
-        import time
-        master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 110, 0, 0))
-        driver = self.home / 'terminal-test.py'
-        driver.write_text(
-            'import sys\n'
-            + 'sys.path.insert(0, ' + repr(str(ROOT / 'tests')) + ')\n'
-            + 'from test_console import console, FakeSystemd\n'
-            + 'collector = console.Collector(' + repr(str(self.config_path)) + ', '
-            + repr(str(self.home)) + ', FakeSystemd(), host="test-host")\n'
-            + 'console.tui(collector, 30)\n')
-        process = subprocess.Popen([sys.executable, str(driver)], stdin=slave, stdout=slave, stderr=slave,
-                                   env={**os.environ, 'TERM': 'xterm-256color'}, cwd=self.home)
-        os.close(slave)
-        output = b''
-        try:
-            deadline = time.monotonic() + 5
-            while b'System health' not in output and time.monotonic() < deadline:
-                ready, _, _ = select.select([master], [], [], 0.1)
-                if ready:
-                    output += os.read(master, 65536)
-            self.assertIn(b'System health', output)
-            for key in (b' ', b'\n', b'\x1b', b'L', b'?', b'\x1b', b'r'):
-                os.write(master, key)
-                select.select([master], [], [], 0.05)
-                if select.select([master], [], [], 0.05)[0]:
-                    output += os.read(master, 65536)
-            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 12, 50, 0, 0))
-            os.write(master, b'q')
-            # Keep draining output while Textual restores the terminal on exit.
-            deadline = time.monotonic() + 8
-            while process.poll() is None and time.monotonic() < deadline:
-                if select.select([master], [], [], 0.1)[0]:
-                    try:
-                        output += os.read(master, 65536)
-                    except OSError:
-                        break
-            self.assertEqual(process.wait(timeout=1), 0, output.decode(errors='replace'))
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-            os.close(master)
-
-    def test_textual_navigation_resize_and_literal_report(self):
-        import asyncio
-        from textual.widgets import DataTable, Static
-
-        async def exercise():
-            app = console.create_app(self.collector, 30)
-            async with app.run_test(size=(110, 30)) as pilot:
-                for _ in range(50):
-                    if app.snapshot:
-                        break
-                    await pilot.pause(0.05)
-                self.assertIsNotNone(app.snapshot)
-                table = app.query_one(DataTable)
-                await pilot.press('j')
-                self.assertEqual(table.cursor_row, 1)
-                selected_id = app.selected()['id']
-                self.collector.reports[selected_id] = '[bold]literal report[/bold]'
-                await pilot.press('space')
-                self.assertEqual(app.mode, 'report')
-                self.assertIn('[bold]literal report[/bold]', str(app.query_one('#document', Static).render()))
-                await pilot.press('escape')
-                self.assertEqual(app.mode, 'overview')
-                self.assertEqual(app.selected()['id'], selected_id)
-                await pilot.press('enter')
-                self.assertEqual(app.mode, 'report')
-                await pilot.press('escape', 'L')
-                await pilot.pause(0.3)
-                self.assertEqual(app.mode, 'logs')
-                self.assertIn('Example log', str(app.query_one('#document', Static).render()))
-                await pilot.press('?')
-                self.assertEqual(app.mode, 'help')
-                await pilot.press('escape', 'r')
-                await pilot.pause(0.3)
-                self.assertEqual(app.selected()['id'], selected_id)
-                for size in ((50, 12), (80, 24), (140, 40)):
-                    await pilot.resize_terminal(*size)
-                    await pilot.press('space', 'j', 'pagedown', 'escape')
-                    self.assertEqual(app.mode, 'overview')
-                    self.assertGreater(table.size.height, 0)
-                    if size == (80, 24):
-                        self.assertGreaterEqual(table.size.height, 8)
-                await pilot.press('q')
-        asyncio.run(exercise())
-
-    def test_delayed_journal_does_not_replace_help(self):
-        import asyncio
-        import threading
-        from textual.widgets import Static
-        started, release = threading.Event(), threading.Event()
-        def delayed_logs(row):
-            started.set()
-            release.wait(3)
-            return 'late journal result'
-        self.collector.logs = delayed_logs
-
-        async def exercise():
-            app = console.create_app(self.collector, 30)
-            async with app.run_test() as pilot:
-                for _ in range(50):
-                    if app.snapshot:
-                        break
-                    await pilot.pause(0.05)
-                await pilot.press('L')
-                self.assertTrue(started.is_set())
-                await pilot.press('?')
-                release.set()
-                await pilot.pause(0.3)
-                self.assertEqual(app.mode, 'help')
-                self.assertNotIn('late journal result', str(app.query_one('#document', Static).render()))
-        try:
-            asyncio.run(exercise())
-        finally:
-            release.set()
 
     def test_action_allowlist_and_preflight_reject_unsafe_jobs(self):
         snapshot = self.collector.snapshot()
@@ -450,101 +391,6 @@ class ConsoleTests(unittest.TestCase):
         with patch.object(console.subprocess, 'run', side_effect=FileNotFoundError):
             self.assertEqual(console.run_service(command), 2)
 
-    def test_tabs_filter_selection_empty_category_and_space_navigation(self):
-        import asyncio
-        from textual.widgets import DataTable, Static
-        async def exercise():
-            app = console.create_app(self.collector, 30)
-            async with app.run_test(size=(110, 30)) as pilot:
-                for _ in range(50):
-                    if app.snapshot:
-                        break
-                    await pilot.pause(0.05)
-                table = app.query_one(DataTable)
-                await pilot.press('h')
-                self.assertEqual(app.category, 'reports')
-                await pilot.press('l')
-                self.assertEqual(app.category, 'all')
-                await pilot.press('l', 'j')
-                self.assertEqual(app.category, 'health')
-                self.assertEqual([row['id'] for row in app.visible_jobs], ['health', 'drift'])
-                self.assertEqual(app.selected()['id'], 'drift')
-                await pilot.press('3')
-                self.assertTrue(all(console.category_for(row) == 'backup' for row in app.visible_jobs))
-                await pilot.press('space')
-                self.assertEqual(app.mode, 'report')
-                self.assertIn('Backup status:', str(app.query_one('#document', Static).render()))
-                await pilot.press('escape', '2')
-                self.assertEqual(app.selected()['id'], 'drift')
-                await pilot.press('r')
-                await pilot.pause(0.3)
-                self.assertEqual(app.selected()['id'], 'drift')
-                for key, category in (('4', 'updates'), ('5', 'services'), ('6', 'reports'), ('1', 'all')):
-                    await pilot.press(key)
-                    self.assertEqual(app.category, category)
-                    self.assertTrue(all(category == 'all' or console.category_for(row) == category for row in app.visible_jobs))
-                # An empty category cannot leave a previous tab's report selected.
-                app.apply_snapshot({**app.snapshot, 'jobs': [row for row in app.snapshot['jobs'] if console.category_for(row) != 'reports']})
-                await pilot.press('6', 'space', 'x')
-                self.assertEqual(table.row_count, 0)
-                self.assertIsNone(app.selected())
-                self.assertEqual(app.mode, 'overview')
-        asyncio.run(exercise())
-
-    def test_tui_run_requires_confirmation_and_does_not_repeat_or_overwrite_help(self):
-        import asyncio
-        import threading
-        from textual.widgets import Static
-        calls = []
-        release = threading.Event()
-        def runner(argv):
-            calls.append(argv)
-            release.wait(3)
-            return 1
-        async def exercise():
-            app = console.create_app(self.collector, 30, action_runner=runner)
-            async with app.run_test(size=(110, 30)) as pilot:
-                for _ in range(50):
-                    if app.snapshot:
-                        break
-                    await pilot.pause(0.05)
-                await pilot.press('y', 'r')
-                await pilot.pause(0.3)
-                self.assertEqual(calls, [])
-                await pilot.press('x', 'space', 'enter')
-                self.assertEqual(app.mode, 'confirm')
-                await pilot.press('h', 'l')
-                self.assertEqual(app.mode, 'confirm')
-                self.assertEqual(app.category, 'all')
-                self.assertIn('replaces the health report', str(app.query_one('#document', Static).render()))
-                self.assertEqual(calls, [])
-                await pilot.press('n', 'y')
-                self.assertEqual(calls, [])
-                await pilot.press('x', 'escape', 'y')
-                self.assertEqual(calls, [])
-                await pilot.press('x', 'y', 'y', 'x')
-                self.assertEqual(len(calls), 1)
-                self.assertTrue(app.busy)
-                await pilot.press('?')
-                release.set()
-                for _ in range(50):
-                    if not app.busy:
-                        break
-                    await pilot.pause(0.05)
-                self.assertEqual(app.mode, 'help')
-                self.assertIn('FAILED:', app.last_action)
-                self.assertNotIn('FAILED: workstation-health', str(app.query_one('#document', Static).render()))
-                await pilot.press('a')
-                self.assertIn('FAILED: workstation-health', str(app.query_one('#document', Static).render()))
-                self.assertEqual(len(calls), 1)
-                await pilot.resize_terminal(50, 12)
-                await pilot.press('escape')
-                self.assertGreater(app.query_one('#jobs').size.height, 0)
-        try:
-            asyncio.run(exercise())
-        finally:
-            release.set()
-
 
 class ConsoleInstallationTests(unittest.TestCase):
     def test_isolated_role_install_is_idempotent_and_records_profile_intent(self):
@@ -563,6 +409,10 @@ class ConsoleInstallationTests(unittest.TestCase):
                              workstation_providers={key: 'none' for key in ('backup', 'sync', 'vpn', 'mail', 'passwords')},
                              workstation_backup_enabled=False, workstation_backup_timer_enabled=False,
                              workstation_syncthing_enabled=False, workstation_report_sources=[])
+            variables.update(workstation_backup_on_calendar='daily',
+                             workstation_backup_restore_test_calendar='monthly',
+                             workstation_backup_sources=[], workstation_backup_excludes=[],
+                             workstation_python_versions=[])
             playbook = root / 'install.yml'
             playbook.write_text(yaml.safe_dump([dict(hosts='localhost', gather_facts=False, become=False,
                                                      vars=variables, roles=['workstation_console'])]))
@@ -581,9 +431,16 @@ class ConsoleInstallationTests(unittest.TestCase):
             self.assertFalse(data['backup_enabled'])
             self.assertEqual(manifest.stat().st_mode & 0o777, 0o600)
             self.assertTrue(os.access(deployed, os.X_OK))
+            assets = home / '.local/share/workstation/web'
+            self.assertEqual({path.name for path in assets.iterdir()}, {'index.html', 'app.css', 'app.js', 'theme.js', 'server.py'})
+            for name in ('index.html', 'app.css', 'app.js', 'theme.js', 'server.py'):
+                self.assertTrue((assets / name).is_file(), name)
+                self.assertEqual((assets / name).stat().st_mode & 0o777, 0o644)
             result = subprocess.run([sys.executable, str(deployed), '--help'], capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0)
             self.assertIn('--json', result.stdout)
+            self.assertIn('--dashboard', result.stdout)
+            self.assertNotIn('textual', deployed.read_text().lower())
 
 
 if __name__ == '__main__':

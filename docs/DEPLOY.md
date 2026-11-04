@@ -4,6 +4,11 @@ This guide owns the workflow for applying repository intent to a workstation.
 For everyday status use [Operations](OPERATIONS.md); for a fresh installation use
 [Tutorial: first installation](../TUTORIAL.md#first-installation). Commands below are Fish-compatible.
 
+The local web dashboard provides forms, reviewed inventory diffs and confirmed
+Ansible preview/apply/audit. It uses the same local execution constraints below;
+sudo prompts and full output stay in its launching terminal. See the
+[dashboard workflow](OPERATIONS.md#web-dashboard). Remote management is deferred.
+
 ## 1. Scope
 
 Provisioning installs/configures packages, dotfiles, user services and maintenance
@@ -181,15 +186,24 @@ and old reports also remain and may warn; their retirement is separate work.
 To reverse a disable, restore the previous selection and enable flags, preview
 and apply on the same host.
 
-## Install only the monitoring console
+## Install only the dashboard
 
-The `workstation_console` role is part of normal provisioning. To install just
-the TUI, its local intent snapshot and Fish completion, use this scoped playbook
-on the intended machine. It installs Ubuntu’s `python3-textual` package for the
-interactive UI, plus local console files. It does not start jobs, change cloud
-data or invoke other workstation roles. Text/JSON modes use only the Python
+The `workstation_console` role is part of normal provisioning. Its role name and
+`console.json` configuration path remain stable for existing installations.
+To install just the dashboard, its local intent snapshot and Fish completion,
+use this scoped playbook on the intended machine. It installs Ubuntu’s
+`python3-yaml` for settings editing,
+plus the Python launcher, local web server, browser assets and Fish completion.
+It does not start jobs, change cloud data or invoke other workstation roles.
+Text/JSON modes use only the Python
 standard library. Set `workstation_console_install_dependencies: false` only
-when Textual is already supplied to the console’s Python interpreter.
+when PyYAML is already supplied to the console’s Python interpreter.
+
+The supported installation uses Ubuntu’s system package, not global `pip`. A
+container deployment is not provided: the console needs the local user’s reports,
+systemd bus and journal access. If supplying an isolated Python environment
+yourself, ensure the installed command’s interpreter can import PyYAML; merely
+installing it into an unrelated virtual environment is insufficient.
 
 ```fish
 cd ~/Projects/ubuntu-workstations/ansible
@@ -204,6 +218,8 @@ Inspect the preview, then deliberately apply and repeat for convergence:
 ansible-playbook playbooks/console.yml -K --limit $target
 ansible-playbook playbooks/console.yml -K --limit $target
 ~/.local/bin/workstation --status
+# Start the dashboard and open the private browser link printed in the terminal:
+~/.local/bin/workstation
 ```
 
 The package task uses sudo; console files are installed as the ordinary user.
@@ -211,14 +227,29 @@ Review the package change in check mode before approving deployment.
 The scoped playbook requires exactly one local inventory target. The command
 is installed at `~/.local/bin/workstation`; Fish completion is installed under
 `~/.config/fish/completions/`. No shell restart is required when that bin
-folder is already on PATH.
+folder is already on PATH. Repeat this scoped preview/apply workflow to update
+an older installed console after reviewing a new Git revision. The second apply
+should report `changed=0`; investigate recurring changes. This playbook installs
+the interface, not missing monitoring services from other roles.
 
 Configuration is stored in `~/.config/workstation/console.json` with no per-run
 timestamp. Reports/status and intended selections remain distinct. Setting
 `workstation_console_enabled: false` skips installation and retains existing
-files; it does not remove the console. Rolling back the reviewed role/source
-and reapplying this playbook replaces only the console/configuration/completion.
-Installing the interface does not run any monitoring job. Approved manual
-monitoring-job runs are available afterward through the TUI’s `x` review and
-`y` confirmation flow; see [manual job runs](OPERATIONS.md#manual-job-runs).
-No host health or real backup/restore is proven by installing the interface.
+files; it does not remove the console or disable manual actions in an already
+installed copy. Rolling back the reviewed role/source and reapplying this
+playbook replaces only the launcher/web assets/configuration/completion.
+Installing the interface does not start the server, run jobs or provision other
+roles. Launch `workstation` and open its private browser link. The server binds
+only loopback, runs on demand under your user account and has no new timer or
+daemon. Use `workstation --demo` for sample data with no host reads/actions.
+
+The Textual TUI code/dependency is removed from this repository. An already
+installed `python3-textual` package is left alone; no package cleanup occurs.
+The scoped playbook replaces the old launcher with the browser dashboard and
+installs assets under `~/.local/share/workstation/web/`. No terminal UI or
+Textual runtime is needed by the new command. Historical release records remain
+in `docs/archive/`.
+Reviewed monitoring runs and setup operations use explicit browser confirmations;
+Ansible input/output remains in the launching terminal. See the
+[dashboard workflow](OPERATIONS.md#web-dashboard). No host health or real
+backup/restore is proven by installing the interface.

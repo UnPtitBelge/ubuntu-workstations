@@ -5,6 +5,11 @@ Selecting a new role in inventory does not transfer data, revoke sessions or
 retire the previous provider. [Providers](PROVIDERS.md) lists selectable roles;
 [Deploy](DEPLOY.md) owns provisioning and explicit disabling.
 
+The console's Lifecycle section presents this sequence as guidance. Its Setup
+editor does not perform provider migrations or decommissioning. An Ansible
+preview/apply from the dashboard does not establish the recovery and cutover
+evidence required here.
+
 ## 1. Rules for any migration
 
 Keep the source usable until independent recovery and destination verification
