@@ -1,0 +1,20 @@
+{{ {
+  'schema_version': 1,
+  'hostname': ansible_facts['hostname'],
+  'inventory_host': inventory_hostname,
+  'profile': workstation_profile,
+  'capabilities': workstation_capabilities,
+  'providers': workstation_providers,
+  'dataset_id': workstation_backup_dataset_id,
+  'backup_enabled': workstation_backup_enabled | bool,
+  'backup_timer_enabled': workstation_backup_timer_enabled | bool,
+  'syncthing_enabled': workstation_syncthing_enabled | bool,
+  'syncthing_service_enabled': workstation_syncthing_service_enabled | default(true) | bool,
+  'tool_update_alerts_enabled': workstation_tool_update_alerts_enabled | default(true) | bool,
+  'security_updates_enabled': workstation_maintenance_security_updates_enabled | default(true) | bool,
+  'thresholds': {
+    'backup_hours': workstation_backup_monitor_max_age_hours | default(48) | float,
+    'restore_hours': workstation_backup_monitor_restore_max_age_hours | default(1080) | float
+  },
+  'reports': workstation_report_sources
+} | to_nice_json }}

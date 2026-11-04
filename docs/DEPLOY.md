@@ -180,3 +180,40 @@ download. Data, credentials and Syncthing identities remain. Monitoring units
 and old reports also remain and may warn; their retirement is separate work.
 To reverse a disable, restore the previous selection and enable flags, preview
 and apply on the same host.
+
+## Install only the monitoring console
+
+The `workstation_console` role is part of normal provisioning. To install just
+the TUI, its local intent snapshot and Fish completion, use this scoped playbook
+on the intended machine. It does not install packages, start jobs, change cloud
+data or invoke any other workstation role. Python's standard-library curses
+support must be available for the TUI; text/JSON modes do not require curses.
+
+```fish
+cd ~/Projects/ubuntu-workstations/ansible
+set target desktop
+# On the laptop use: set target laptop
+env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --check --diff --limit $target
+```
+
+Inspect the preview, then deliberately apply and repeat for convergence:
+
+```fish
+env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --limit $target
+env ANSIBLE_BECOME_ASK_PASS=false ansible-playbook playbooks/console.yml --limit $target
+~/.local/bin/workstation --status
+```
+
+`ANSIBLE_BECOME_ASK_PASS=false` suppresses the repository's global escalation
+prompt for this unprivileged playbook; it does not grant sudo permissions.
+The scoped playbook requires exactly one local inventory target. The command
+is installed at `~/.local/bin/workstation`; Fish completion is installed under
+`~/.config/fish/completions/`. No shell restart is required when that bin
+folder is already on PATH.
+
+Configuration is stored in `~/.config/workstation/console.json` with no per-run
+timestamp. Reports/status and intended selections remain distinct. Setting
+`workstation_console_enabled: false` skips installation and retains existing
+files; it does not remove the console. Rolling back the reviewed role/source
+and reapplying this playbook replaces only the console/configuration/completion.
+No host health or real backup/restore is proven by installing the interface.

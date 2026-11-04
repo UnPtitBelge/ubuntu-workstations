@@ -1,0 +1,4 @@
+---
+# No daemon, timer, package installation or third-party Python dependency.
+workstation_console_enabled: true
+workstation_console_config_dir: "{{ ansible_facts['env']['HOME'] }}/.config/workstation"

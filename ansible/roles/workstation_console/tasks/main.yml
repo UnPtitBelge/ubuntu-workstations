@@ -1,0 +1,32 @@
+---
+- name: Install local workstation monitoring console
+  become: false
+  when: workstation_console_enabled | bool
+  block:
+    - name: Ensure console directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        - "{{ workstation_console_config_dir }}"
+        - "{{ ansible_facts['env']['HOME'] }}/.config/fish/completions"
+
+    - name: Install read-only workstation TUI and status CLI
+      ansible.builtin.copy:
+        src: workstation.py
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/workstation"
+        mode: '0755'
+
+    - name: Record console intent without credentials or per-run timestamps
+      ansible.builtin.template:
+        src: console.json.j2
+        dest: "{{ workstation_console_config_dir }}/console.json"
+        mode: '0600'
+
+    - name: Install Fish completion for workstation
+      ansible.builtin.copy:
+        src: workstation.fish
+        dest: "{{ ansible_facts['env']['HOME'] }}/.config/fish/completions/workstation.fish"
+        mode: '0644'

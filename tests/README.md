@@ -32,3 +32,12 @@ These are isolated task integration tests, not full provisioning tests. They
 do not install packages, contact providers, access credentials, upload data,
 or manage real services. A disposable Ubuntu VM rehearsal, target-host strict
 audit, live service checks and full-playbook idempotency remain separate.
+
+The console tests use synthetic local reports and an injected read-only systemd
+runner. They cover freshness, malformed/missing data, provider/host/dataset
+attribution, disabled intent versus observed schedules, legacy restore evidence,
+missing baselines/bus access, terminal-control sanitization, file limits and
+noninteractive errors. A pseudo-terminal smoke test exercises real curses
+navigation/resize/exit with synthetic evidence. An isolated role installation
+checks valid private configuration and second-pass convergence in a temporary
+home. No console test reads live journals or contacts a provider.

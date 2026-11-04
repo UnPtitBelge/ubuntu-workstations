@@ -7,23 +7,25 @@ it is deployed or has passed a real cloud/restore test.
 
 ## Next: management CLI
 
-**Planned; no unified CLI exists yet.** Make the setup understandable from one
-entry point, reusing existing reports, systemd units and provider helpers. Start
-with inspection before adding actions. Do not introduce another scheduler.
+**Implemented in the repository: `workstation`, a read-only TUI plus status/JSON
+CLI.** It reuses reports and local systemd evidence, with Ansible installation
+and Fish completion. Management actions remain separate future work; no new
+scheduler is introduced.
 
-- [ ] Show local host, selected profile/provider intent and installed jobs together, with an explicit distinction between desired and observed state.
-- [ ] Summarize health, drift, backup, restore evidence, update discovery and post-update validation with their timestamps and evidence paths.
-- [ ] Distinguish healthy, failed, stale, unknown/missing and intentionally disabled/not applicable. Never treat a missing result as success.
-- [ ] Show next/last timer execution and the last service outcome; inactive successful oneshot services must not look broken.
-- [ ] Tie backup/restore evidence to host, provider and dataset; handle malformed/shared/stale records without false green status.
-- [ ] Offer focused detail/log views and explain the next useful action without dumping private data by default.
-- [ ] Keep ordinary status inspection read-only and bounded in time. It must not query cloud accounts, refresh baselines, upload, download or repair anything implicitly.
+- [x] Show local host, selected profile/provider intent and installed jobs together, with an explicit distinction between desired and observed state.
+- [x] Summarize health, drift, backup, restore evidence, update discovery and post-update validation with their timestamps and evidence paths.
+- [x] Distinguish healthy, failed, stale, unknown/missing and intentionally disabled/not applicable. Never treat a missing result as success.
+- [x] Show next/last timer execution and the last service outcome; inactive successful oneshot services must not look broken.
+- [x] Tie backup/restore evidence to host, provider and dataset; handle malformed/shared/stale records without false green status.
+- [x] Offer focused detail/log views and explain the next useful action without dumping private data by default.
+- [x] Keep ordinary status inspection read-only and bounded in time. It must not query cloud accounts, refresh baselines, upload, download or repair anything implicitly.
 - [ ] Add explicit report refresh, backup preview/run and restore-test actions only with clear effects and failure propagation; persist configuration changes through Ansible.
-- [ ] Provide useful help, stable JSON output/exit semantics and Fish completion; test missing helpers, unavailable user buses, stale reports and both backup providers without live accounts.
+- [x] Provide useful help, stable JSON output/exit semantics and Fish completion; test missing helpers, unavailable user buses, stale reports and both backup providers without live accounts.
 
-Command naming and the final interaction design remain to be implemented. The
-[operations guide](OPERATIONS.md) is the current behavior/evidence inventory for
-that work, not a promise that every monitor already exposes a reliable API.
+The [operations guide](OPERATIONS.md#monitoring-tui) documents the implemented
+interface, exit codes and evidence limits. Console tests use synthetic data,
+including real terminal navigation and an isolated idempotent role install;
+they do not certify live host health or cloud recovery.
 
 ## Correctness before more automation
 

@@ -209,6 +209,7 @@
     - apt_update_review
     - post_update_validation
     - release_audit
+    - workstation_console
 
   post_tasks:
     # Every selected provider role records its adapter contract (supported vs

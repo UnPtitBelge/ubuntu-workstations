@@ -5,8 +5,9 @@ setup includes GNOME, Fish/Ghostty, development tools, Docker, virtualization,
 Syncthing, Proton applications, cloud backups and maintenance jobs.
 
 **Start with [TUTORIAL.md](TUTORIAL.md)** for a walkthrough of an existing setup
-or a first installation. A unified management CLI is planned; today the interface
-is a set of helpers and systemd commands.
+or a first installation. `workstation` opens the local monitoring TUI;
+`workstation --status` prints a snapshot and `workstation --json` exposes the same
+evidence to scripts. See [console installation](docs/DEPLOY.md#install-only-the-monitoring-console).
 
 ## Documentation
 

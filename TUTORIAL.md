@@ -29,11 +29,25 @@ A new Git revision does not mean it has been applied to this machine.
 
 The setup has four layers: Git/Ansible declares intent, installed systemd units
 schedule work, helpers produce reports, and notifications draw attention to
-some results. A unified management CLI is still planned, not implemented.
+some results. The `workstation` TUI brings those local observations together;
+it does not run jobs or repair failures.
 
 ## 2. Read existing results before running more checks
 
-These commands only inspect local state:
+If the console is installed, start here:
+
+```fish
+workstation
+```
+
+Use Up/Down (or j/k) to select, Enter for the saved report, `l` for the selected
+journal, `r` to reread existing evidence, `?` for help and `q` to quit. Rereading
+never runs a check/upload/restore. For a single noninteractive snapshot use
+`workstation --status` or `workstation --json`. Logs and full reports are shown
+only on request and may contain private paths.
+
+If the command is missing, follow [console-only installation](docs/DEPLOY.md#install-only-the-monitoring-console).
+You can also inspect the underlying evidence directly:
 
 ```fish
 cat ~/.local/state/workstation-weekly-report/latest.txt
