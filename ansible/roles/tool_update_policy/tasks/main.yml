@@ -1,0 +1,14 @@
+---
+- name: Ensure local executable directory exists
+  become: false
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.local/bin"
+    state: directory
+    mode: '0755'
+
+- name: Install read-only mise pin approval helper
+  become: false
+  ansible.builtin.copy:
+    src: workstation-tool-update-policy.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-tool-update-policy"
+    mode: '0755'
