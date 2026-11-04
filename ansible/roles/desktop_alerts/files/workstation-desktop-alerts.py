@@ -43,6 +43,23 @@ def problems(home: Path, max_age_hours: float, now: float):
             details = DETAIL_RE.findall(report)
             reason = details[0].strip() if details else statuses[0].strip()
             issues.append((name, reason[:140]))
+    # Post-update validation is event-driven, not a daily health snapshot.
+    # Its latest report may be absent before the first update or old after a
+    # successful validation. Alert only on an explicit unhealthy result.
+    update_report = home / ".local/state/workstation-post-update/latest.txt"
+    if update_report.exists():
+        try:
+            content = update_report.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            issues.append(("Post-update validation", f"report unreadable ({type(exc).__name__})"))
+        else:
+            statuses = OVERALL_RE.findall(content)
+            if len(statuses) != 1:
+                issues.append(("Post-update validation", "report has no unambiguous OVERALL status"))
+            elif statuses[0].strip() != "HEALTHY":
+                details = DETAIL_RE.findall(content)
+                reason = details[0].strip() if details else statuses[0].strip()
+                issues.append(("Post-update validation", reason[:140]))
     return issues
 
 
@@ -67,7 +84,11 @@ def main():
     parser.add_argument("--repeat-hours", type=float, default=24)
     parser.add_argument("--dry-run", action="store_true", help="Show decisions, do not notify or write state")
     parser.add_argument("--test-notification", action="store_true", help="Send one explicit test notification")
+    parser.add_argument("--test-post-update-failure", action="store_true",
+                        help="Simulate a post-update failure in dry-run mode only")
     args = parser.parse_args()
+    if args.test_post_update_failure and not args.dry_run:
+        parser.error("--test-post-update-failure requires --dry-run")
     if args.max_report_age_hours <= 0 or args.repeat_hours <= 0:
         parser.error("age and repeat intervals must be positive")
     if args.test_notification:
@@ -76,6 +97,8 @@ def main():
     home = Path.home()
     now = time.time()
     issues = problems(home, args.max_report_age_hours, now)
+    if args.test_post_update_failure:
+        issues.append(("Post-update validation", "simulated Docker API failure"))
     state = home / ".local/state/workstation-desktop-alerts/last-alert.json"
     if not issues:
         print("HEALTHY: no alerts needed")
