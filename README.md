@@ -322,7 +322,8 @@ The optional `rehearsal-headless.yml` playbook tests foundational provisioning i
 | --- | --- |
 | `v1.0.0` | Reproducible Ubuntu workstation baseline |
 | `v1.1.0` | Automated security maintenance, health, drift, backups, weekly reports and failure notifications |
-| **`v1.2.0`** | Development-tool update discovery, reviews, notifications and post-update validation |
+| `v1.2.0` | Development-tool update discovery, reviews, notifications and post-update validation |
+| **`v1.3.0`** | Multi-setup profiles (`profiles/`), vendor-namespaced providers with Google/WireGuard/KeePassXC adapters, third-party onboarding script, provider-following backup monitoring, public-release hardening (license, SECURITY.md, CI secret scan, Dependabot) |
 
 To inspect the released revision:
 
