@@ -1,6 +1,6 @@
 # DEPLOY — From two named workstations to a reusable Ubuntu profile
 
-**Status:** Design and runbook based on the working `v1.2.0` deployment. The **current** repository provisions `Omnissiah-desktop` (`desktop`) and `Omnissiah-pocket` (`laptop`). It is **not yet** a generic, fully unattended installer.
+**Status:** Based on the working, public `v1.3.0` repository. It provisions `Omnissiah-desktop` (`desktop`) and `Omnissiah-pocket` (`laptop`), and ships reusable **profiles** (`profiles/`) plus a fill-in onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`) so a third party can add a machine with inventory/profile data only. Enrollment of credentials, device identities and backup destinations is still manual, so this is **not** a fully unattended installer.
 
 See [TODO.md](TODO.md) for the implementation backlog and [MIGRATE.md](MIGRATE.md) for changing providers after deployment. For existing operational commands, see [WORKSTATION-CHEATSHEET.md](WORKSTATION-CHEATSHEET.md).
 
@@ -77,7 +77,7 @@ mkdir -p ~/Projects
 
 1. **Inventory:** Add a unique host entry to `ansible/inventory/hosts.yml`, with an explicit inventory name, real hostname, and the same local-connection conventions used by `desktop`/`laptop`. Do not duplicate a host's identity. Confirm with `ansible-inventory --host <new-host>`. **Easy path:** fill in `setup.yml.example`, copy it to `setup.local.yml` (gitignored), and run `python3 scripts/setup-workstation.py --verify` — it generates the entry and variables for you.
 2. **Host overrides:** Create `ansible/inventory/host_vars/<new-host>.yml` using the nearest existing host as a *template for nonsecret settings only*. Remove laptop/desktop-only assumptions, hard-coded paths, displays and backup destinations. Prefer shared settings from `group_vars/all.yml`. Generic starting points are provided as inert `.example` files that Ansible never loads: `ansible/inventory/hosts.yml.example` and `ansible/inventory/host_vars/workstation.yml.example`.
-3. **Capabilities:** Audit each role's `when:` conditions and defaults. At `v1.2.0`, Proton and backup-monitoring logic still have provider-specific expectations, so a third host that opts out may need a reviewed playbook change.
+3. **Capabilities:** Choose them in the profile (`workstation_capabilities`) and their providers (`workstation_providers`; values are `vendor/name` paths under `ansible/roles/providers/` or `none`). Since v1.3.0 the dispatch and backup monitoring are provider-following, so a third host that opts out of a capability needs **no playbook change** — just the profile/host variables.
 4. **Bootstrap:** Install prerequisite packages and clone the repo on the new host. Authenticate the Git remote without sharing SSH private keys from another computer.
 5. **Dry run → real run:** From the new host, run syntax check, `--check --diff`, then the actual playbook with `--limit <new-host>`. Never run another local inventory host from the wrong machine.
 6. **Manual enrollment:** Sign in to providers; establish the host's unique Syncthing identity and pairing; verify VPN, mail/password-manager sessions as selected; create a **host-specific** backup destination.
@@ -88,7 +88,7 @@ mkdir -p ~/Projects
 The capability/provider schema below is **implemented** (defaults reproduce the original Proton + Syncthing setup); provider adapters beyond the built-ins in `ansible/roles/providers/` are still future work:
 
 ```yaml
-workstation_profile: developer_gnome
+workstation_profile: developer_gnome      # profiles/developer_gnome.yml supplies these defaults
 workstation_capabilities:
   shell: {enabled: true}
   containers: {enabled: true}
@@ -98,12 +98,12 @@ workstation_capabilities:
   vpn: {enabled: true}
   mail: {enabled: true}
   passwords: {enabled: true}
-workstation_providers:
+workstation_providers:                     # vendor/name paths; use "none" to skip a capability
   sync: syncthing
-  backup: proton_drive
-  vpn: proton_vpn
-  mail: proton_mail
-  passwords: proton_pass
+  backup: proton/drive                     # or google/drive (rclone), custom, <vendor>/<name>
+  vpn: proton/vpn                          # or wireguard
+  mail: proton/mail                        # or google/mail
+  passwords: proton/pass                   # or keepassxc
 workstation_backup_destination: "<computed/validated per-host destination>"
 ```
 
@@ -114,7 +114,7 @@ Do not put plaintext access tokens, password-vault exports, recovery phrases or 
 ```text
 Profiles (developer_gnome, headless, lightweight ...)
   └── Capabilities (backup, sync, vpn, mail, passwords, containers ...)
-       └── Selected providers (proton_drive, rclone_gdrive, syncthing, custom, ...)
+       └── Selected providers (proton/drive, google/drive, syncthing, custom, ...)
             └── Implementation adapters (install/configure/health/export/import)
                  └── Normalized monitoring and migration metadata
 ```
@@ -137,7 +137,7 @@ Provider adapters should be independently selectable; installing an alternative 
 
 ### Standardized paths and reports (proposal)
 
-Use stable capability names in timers and reports, with provider metadata in the payload. E.g., a future `workstation-backup.service` could call the selected adapter and emit `~/.local/state/workstation-backup/status.json`. Today the working units are named `workstation-proton-backup.*`, and monitoring is tied to them—**do not rename them in place without migration and cleanup tasks**.
+Use stable capability names in timers and reports, with provider metadata in the payload. Since v1.3.0 this is implemented for backup: each provider writes `~/.local/state/workstation-backup/status.json` and sets `workstation_backup_monitor_service/_timer`, so monitoring follows the selected provider without renaming anything. Systemd unit names stay provider-specific (`workstation-proton-backup.*`, `workstation-rclone-backup.*`) so old and new can run side by side during a migration—**do not rename them in place without migration and cleanup tasks**.
 
 ### Safety requirements for profiles
 
@@ -158,16 +158,16 @@ Use stable capability names in timers and reports, with provider metadata in the
 - [ ] Monitoring and notifications use capability-neutral status records.
 - [ ] The release documents exact prerequisites, unsupported profiles/hardware and a rollback path.
 
-## 6. Where v1.2.0 falls short
+## 6. Where v1.3.0 still falls short
 
-| Ideal | Current status | Work required |
+| Ideal | Current status (v1.3.0) | Work required |
 | --- | --- | --- |
-| Add any machine by choosing a profile | Two named local hosts tested | Generic host inventory/profile and clean-install tests |
-| Select providers independently | Proton roles and monitoring are coupled | Capability flags + provider-specific adapters |
-| Switch backup provider without code edits | Backup script/monitor reference Proton | Provider-neutral backup contract, migration and rollback |
+| Add any machine by choosing a profile | Implemented: `profiles/` + onboarding script; two named hosts tested, one clean-VM rehearsal passed | More clean-install rehearsals per profile; interactive GNOME rehearsal |
+| Select providers independently | Implemented: `workstation_providers` dispatch to vendor-namespaced roles; monitoring provider-following | More built-in adapters (see [PROVIDERS.md](PROVIDERS.md)) |
+| Switch backup provider without code edits | Selection is a variable change; data migration is a runbook ([MIGRATE.md](MIGRATE.md) §3) | Automated export/import/verify per adapter |
 | Preserve cross-provider datasets and metadata | No universal exporter/importer | Format- and provider-specific migration tooling |
-| Recover after a host loss | Selected Proton Drive copies + documentation | Regular verified restores, identity and secret enrollment runbook |
-| Support any distro/desktop | Ubuntu 26.04/GNOME focused | Support matrix and conditional roles, or explicitly limit scope |
+| Recover after a host loss | Selected Drive copies + documentation | Regular verified restores, identity and secret enrollment runbook |
+| Support any distro/desktop | Ubuntu 26.04 LTS only (explicit scope) | Keep the scope explicit, or add a support matrix later |
 
 **Recommendation:** Make *Ubuntu 26.04 GNOME developer workstation* the first supported generic profile. Expand only after a third-host rehearsal passes; genericity is valuable only if it remains reliable.
 
@@ -177,7 +177,7 @@ Adding a tool to the managed set is configuration-only — no playbook or script
 
 | Concern | Variable | Defined in |
 | --- | --- | --- |
-| Tool data to back up | `workstation_backup_sources` | `ansible/roles/backup/defaults/main.yml` (or `host_vars/`) |
+| Tool data to back up | `workstation_backup_sources` | `ansible/inventory/group_vars/all.yml` (or `host_vars/`; provider defaults in e.g. `ansible/roles/providers/proton/drive/defaults/main.yml`) |
 | Tool caches excluded from backups | `workstation_backup_excludes` | same |
 | Backup dataset label | `workstation_backup_dataset_id` | same |
 | Health-checked units | `workstation_health_system_services`, `workstation_health_user_services`, `workstation_health_system_timers` | `ansible/roles/health/defaults/main.yml` |

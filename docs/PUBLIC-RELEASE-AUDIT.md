@@ -147,3 +147,12 @@ All changes are read-only monitors plus additive, backward-compatible behavior; 
 ## Conclusion
 
 **READY WITH WARNINGS.** No sensitive data (secrets, keys, sessions, device IDs, private network identifiers) exists in the current tree or in the complete Git history — confirmed by both a manual full-blob scan and gitleaks 8.30.1 (56 commits, no leaks). The owner has approved publishing the commit email, hostnames and username. This audit added `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes`, a gitleaks CI workflow, generic example inventory files, and documentation fixes, and deleted the stale broken `health/files/` duplicates. The only remaining items before flipping visibility are confirming the CI run is green on `main` and the repository **settings** (branch protection; then visibility; then GitHub secret scanning/push protection, which appear once the repo is public). A clean-machine Multipass rehearsal was executed and passed (idempotent, toolchains verified); the desktop was then provisioned, validated and re-verified healthy with the new roles. Both `desktop` and `laptop` remain provisionable with their existing configuration.
+
+## v1.3.0 publication addendum (2026-11-04)
+
+The open checklist items above are now complete; the repository is **public** and released as annotated tag **`v1.3.0`**:
+
+- GitHub secret scanning, push protection and private vulnerability reporting enabled; branch protection on `main`; Dependabot activated (`.github/dependabot.yml`: Actions + pip).
+- CI (`.github/workflows/ci.yml`) runs green on the released `main`.
+- Post-audit features shipped in v1.3.0: multi-setup profiles (`profiles/`), vendor-namespaced providers (`ansible/roles/providers/<vendor>/<name>/` — the paths in the findings tables above moved accordingly: `ansible/roles/proton/` → `ansible/roles/providers/proton/<component>/`, `ansible/roles/backup/` → `ansible/roles/providers/proton/drive/`), onboarding script (`setup.yml.example` + `scripts/setup-workstation.py`), and provider-following backup monitoring. Details in [PROVIDERS.md](PROVIDERS.md) and [DEPLOY.md](DEPLOY.md).
+- No new sensitive data was introduced by these changes; gitleaks re-run over the full history at release time: no leaks.

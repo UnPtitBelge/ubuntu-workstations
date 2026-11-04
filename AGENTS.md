@@ -5,7 +5,7 @@ Instructions for AI coding agents working in this repository. Read this file **b
 ## Project and scope
 
 - **Project:** Personal, reproducible Ubuntu 26.04 LTS workstations managed with **Ansible + Git**.
-- **Current released baseline:** `v1.2.0`. The current working tree may contain post-release changes; inspect Git rather than assuming it matches the tag.
+- **Current released baseline:** `v1.3.0` (public repository). The current working tree may contain post-release changes; inspect Git rather than assuming it matches the tag.
 - **Machines:** `Omnissiah-desktop` (inventory host `desktop`) and `Omnissiah-pocket` (inventory host `laptop`). The usual development machine is the desktop.
 - **Shell:** **Fish**, not Bash. Give Fish-compatible *interactive commands*. A script with `#!/usr/bin/env bash` is acceptable when Bash is explicitly chosen and installed; do not present Bash syntax as Fish syntax.
 - **Repo on each machine:** `~/Projects/ubuntu-workstations`. Always confirm the actual working directory, repository status, and target host.
@@ -39,20 +39,24 @@ If a referenced document or command is absent, report the discrepancy. Do not in
 ## Repository map
 
 ```text
-ansible/inventory/hosts.yml               # inventory names and local execution
-ansible/inventory/group_vars/all.yml       # shared inventory configuration
-ansible/inventory/host_vars/{desktop,laptop}.yml
-ansible/playbooks/workstation.yml          # provisioning role order
+profiles/<name>.yml                      # multi-setup profiles (developer_gnome default, minimal, headless)
+setup.yml.example                        # onboarding template; setup.local.yml (gitignored) drives scripts/setup-workstation.py
+ansible/inventory/hosts.yml               # inventory names and local execution (+ hosts.yml.example)
+ansible/inventory/group_vars/all.yml       # shared inventory configuration; loads profiles/<workstation_profile>.yml
+ansible/inventory/host_vars/{desktop,laptop}.yml   # (+ *.yml.example inert templates)
+ansible/playbooks/workstation.yml          # provisioning: validates profile/providers, dispatches roles
 ansible/playbooks/validate-workstation.yml # strict workstation audit
+ansible/playbooks/rehearsal-headless.yml   # optional disposable-VM rehearsal
 ansible/roles/                           # provisioning and maintenance roles
-scripts/                                 # repository utilities
+ansible/roles/providers/<vendor>/<name>/  # capability providers (proton/*, google/*, syncthing, wireguard, keepassxc, custom)
+scripts/                                 # repository utilities (audit, bootstrap, onboarding, maintenance)
 assets/                                  # optional versioned appearance assets
-docs/README*                             # consult actual filenames
+docs/                                    # runbooks and audits (consult actual filenames)
 README.md
 AGENTS.md
 ```
 
-Existing role families include workstation foundation (hardware, base, shell, bootstrap, languages, containers, virtualization, gnome), data/services (syncthing, proton, backup), and maintenance (security updates, health, drift, backup monitoring, weekly report, desktop alerts, tool updates, update policies/reviews, post-update validation, release audit). **Inspect the current playbook for authoritative role names/order.**
+Role families: workstation foundation (hardware, base, shell, bootstrap, languages, containers, virtualization, gnome), capability **providers** under `ansible/roles/providers/<vendor>/<name>/` selected by `workstation_capabilities` / `workstation_providers` (built-ins: `proton/drive`, `proton/vpn`, `proton/pass`, `proton/mail`, `google/drive`, `google/mail`, `syncthing`, `wireguard`, `keepassxc`, `custom`), and maintenance (security updates, health, drift, backup monitoring, weekly report, desktop alerts, tool updates, update policies/reviews, post-update validation, release audit). **Inspect the current playbook for authoritative role names/order.**
 
 ## Change workflow
 
@@ -134,11 +138,11 @@ Never auto-commit/push/tag as part of a provisioning role. Before pushing, confi
 - GNOME notifications require a suitable active graphical session. `Linger=yes` keeps the user service manager available after logout; it does not create a graphical session or guarantee cloud authentication.
 - Post-update validation may legitimately have an old or missing successful report if no monitored package changed; don't alert on staleness alone. Alert on actual failure.
 
-## Provider portability: current state versus target
+## Provider portability: implemented interface, growing adapter set
 
-The repository **currently** has provider-specific Proton roles and monitoring. A generic capability/provider interface is **proposed, not implemented**. Follow `docs/DEPLOY.md`, `docs/MIGRATE.md`, and `docs/TODO.md` when designing changes.
+Since `v1.3.0` the repository implements a capability/provider interface: `workstation_capabilities` and `workstation_providers` (in `ansible/inventory/group_vars/all.yml`, profile-overridable) select vendor-namespaced roles under `ansible/roles/providers/<vendor>/<name>/`; the playbook validates the selection and dispatches. Backup monitoring consumes a normalized `~/.local/state/workstation-backup/status.json` record and follows the selected provider's units. Built-in adapters: Proton (drive/vpn/pass/mail), Google (drive via rclone, mail via Thunderbird), Syncthing, WireGuard, KeePassXC, and the guidance-only `custom`. Adding a provider = adding a role directory (see `CONTRIBUTING.md`); more adapters and the `export`/`import`/`verify` contract from `docs/MIGRATE.md` §5 remain future work. Follow `docs/DEPLOY.md`, `docs/MIGRATE.md`, and `docs/TODO.md` when changing this.
 
-Prefer capability boundaries such as **backup**, **file sync**, **VPN**, **mail**, and **password manager** over a single provider-owned monolith. Future adapters should document supported `install`, `configure`, `health`, `export`, `import`, `verify`, and `disable` operations; unsupported operations must be clearly marked manual.
+Capability boundaries are **backup**, **file sync**, **VPN**, **mail**, and **password manager** — never a single provider-owned monolith. Adapters document supported `install`, `configure`, `health`, `export`, `import`, `verify`, and `disable` operations; unsupported operations must be clearly marked manual.
 
 Changing a provider variable must **never implicitly migrate, erase, or decommission** another provider. Migration should follow: inventory → independent backup/restore proof → parallel setup → transfer → verification → explicit cutover → observation → separately approved decommissioning. Preserve encryption, metadata, identities, retention, and a rollback path.
 

@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes are applied to the `main` branch and to the latest release tag
-(currently `v1.2.0`). Older tags are kept for reference and are not maintained.
+(currently `v1.3.0`). Older tags are kept for reference and are not maintained.
 
 ## Reporting a vulnerability
 

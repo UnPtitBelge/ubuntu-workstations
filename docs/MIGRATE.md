@@ -1,6 +1,6 @@
 # MIGRATE — Switching workstation providers without losing data
 
-**Status:** A migration framework and manual runbook proposal for the `v1.2.0` workstation repository. **It is not an existing one-command migration tool.** Current roles are primarily Proton-centered; provider adapters, export/import orchestration and neutral monitoring remain planned work.
+**Status:** Manual runbooks for the public `v1.3.0` repository. The capability/provider **selection** is implemented (`workstation_capabilities` / `workstation_providers` dispatching to vendor-namespaced roles under `ansible/roles/providers/`, with normalized backup monitoring), but there is **no one-command migration tool**: every cutover below remains a staged, human-driven procedure. Export/import orchestration per adapter is still planned work.
 
 Related: [DEPLOY.md](DEPLOY.md) · [PROVIDERS.md](PROVIDERS.md) · [TODO.md](TODO.md) · [WORKSTATION-ROUTINE-CHECKLIST.md](WORKSTATION-ROUTINE-CHECKLIST.md) · [WORKSTATION-RECOVERY.md](WORKSTATION-RECOVERY.md).
 
@@ -67,7 +67,7 @@ Old data deletion approval date (separate):
 
 ## 3. Example: migrating **from Proton Drive backups** to another backup backend
 
-At `v1.2.0`, the `backup` role, `workstation-proton-backup.service`, backup monitor and success-stamp integration are tied to Proton. Merely changing `workstation_providers.backup` (a **proposed** future variable) will not migrate data or reconfigure these consumers.
+Since `v1.3.0`, the backup capability is selected by `workstation_providers.backup` (`proton/drive`, `google/drive`, …) and the monitor follows the selected provider's units via the normalized `~/.local/state/workstation-backup/status.json` record. Changing that variable provisions the new provider's roles, but it **does not migrate data and does not touch the old provider's remote copies** — follow the runbook below.
 
 ### Preflight
 
@@ -143,10 +143,10 @@ workstation_capabilities:
   passwords: {enabled: true}
 
 workstation_providers:
-  backup: proton_drive    # later: another supported adapter
+  backup: proton/drive    # or google/drive, custom, <vendor>/<name>, none
   sync: syncthing
-  vpn: proton_vpn
-  passwords: proton_pass
+  vpn: proton/vpn         # or wireguard
+  passwords: proton/pass  # or keepassxc
 
 workstation_migration:
   mode: observe           # example states: observe, prepare, cutover
@@ -172,7 +172,7 @@ Sample proposed backup status record:
 {
   "schema_version": 1,
   "capability": "backup",
-  "provider": "proton_drive",
+  "provider": "proton/drive",
   "host": "Omnissiah-desktop",
   "dataset_id": "home-selected",
   "checked_at": "<ISO-8601 timestamp>",
@@ -185,9 +185,9 @@ The `result` is only a job status, **not** proof of remote integrity. A separate
 
 ## 6. Tests required before calling the system provider-independent
 
-- [ ] Two different backup providers can be selected by inventory/profile without editing the playbook.
-- [ ] Disabling Proton Drive backup does not cause an unrelated Proton VPN, mail or password-manager role to fail.
-- [ ] Backup monitor, reports and GNOME alerts consume normalized status and do not assume `workstation-proton-backup.service`.
+- [x] Two different backup providers can be selected by inventory/profile without editing the playbook. _Done in v1.3.0:_ `proton/drive` and `google/drive` share the `workstation_backup_*` variables and the normalized status record.
+- [x] Disabling Proton Drive backup does not cause an unrelated Proton VPN, mail or password-manager role to fail. _Done in v1.3.0:_ providers are independent roles (`proton/{drive,vpn,pass,mail}`); capabilities toggle independently.
+- [x] Backup monitor, reports and GNOME alerts consume normalized status and do not assume `workstation-proton-backup.service`. _Done in v1.3.0:_ the checker reads `status.json` (legacy `last-success` fallback) and follows `workstation_backup_monitor_service/_timer` set by the selected provider.
 - [ ] Export/import preserves the documented dataset and identifies unsupported metadata; a real restore test passes.
 - [ ] A reversible cutover can switch providers and roll back without silently losing intervening writes.
 - [ ] Both existing machines still pass strict validation and idempotency tests after provider separation.
