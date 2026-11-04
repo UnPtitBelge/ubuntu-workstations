@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic fallback for post-update package checks
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Unit=workstation-post-update-validation.service
+
+[Install]
+WantedBy=timers.target

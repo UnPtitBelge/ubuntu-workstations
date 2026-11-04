@@ -1,0 +1,6 @@
+[Unit]
+Description=Read-only post-update verification for Docker and Proton VPN
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-post-update-validate --watch

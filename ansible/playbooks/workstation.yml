@@ -29,3 +29,4 @@
     - tool_update_alerts
     - tool_update_policy
     - apt_update_review
+    - post_update_validation

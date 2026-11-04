@@ -1,0 +1,59 @@
+---
+- name: Create post-update validation directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-post-update"
+
+- name: Install post-update validation checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-post-update-validate.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-post-update-validate"
+    mode: '0755'
+
+- name: Install post-update validation service
+  become: false
+  ansible.builtin.copy:
+    src: workstation-post-update-validation.service
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-post-update-validation.service"
+    mode: '0644'
+
+- name: Install APT database path watcher
+  become: false
+  ansible.builtin.copy:
+    src: workstation-post-update-validation.path
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-post-update-validation.path"
+    mode: '0644'
+
+- name: Install periodic post-update fallback timer
+  become: false
+  ansible.builtin.copy:
+    src: workstation-post-update-validation.timer
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-post-update-validation.timer"
+    mode: '0644'
+
+- name: Enable read-only post-update watcher
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-post-update-validation.path
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Enable periodic post-update fallback
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-post-update-validation.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode

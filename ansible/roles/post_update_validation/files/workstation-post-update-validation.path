@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch installed APT package database for changes
+
+[Path]
+PathChanged=/var/lib/dpkg/status
+Unit=workstation-post-update-validation.service
+
+[Install]
+WantedBy=paths.target
