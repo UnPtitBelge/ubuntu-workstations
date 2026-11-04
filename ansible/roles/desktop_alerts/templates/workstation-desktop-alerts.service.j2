@@ -1,0 +1,6 @@
+[Unit]
+Description=Notify on workstation monitoring problems
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-desktop-alerts --max-report-age-hours {{ workstation_desktop_alerts_max_report_age_hours }} --repeat-hours {{ workstation_desktop_alerts_repeat_hours }}

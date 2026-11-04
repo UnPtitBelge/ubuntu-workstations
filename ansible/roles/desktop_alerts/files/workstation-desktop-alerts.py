@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Notify the logged-in desktop user only when workstation reports need attention.
+
+Read-only toward monitored services/configuration; never runs a backup or repair.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+SOURCES = (
+    ("System health", ".local/state/workstation-health/latest.txt", "HEALTHY"),
+    ("Configuration drift", ".local/state/workstation-drift/latest.txt", "NO DRIFT DETECTED"),
+    ("Proton Drive backup", ".local/state/workstation-backup-monitor/latest.txt", "HEALTHY"),
+)
+OVERALL_RE = re.compile(r"^OVERALL:\s*(.+?)\s*$", re.MULTILINE)
+DETAIL_RE = re.compile(r"^\[(?:WARN|DRIFT|FAIL|ERROR)\]\s*(.+)$", re.MULTILINE)
+
+
+def problems(home: Path, max_age_hours: float, now: float):
+    issues = []
+    for name, relative, healthy_status in SOURCES:
+        path = home / relative
+        try:
+            stat = path.stat()
+            report = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            issues.append((name, f"report unavailable ({type(exc).__name__})"))
+            continue
+        age_hours = (now - stat.st_mtime) / 3600
+        if not 0 <= age_hours <= max_age_hours:
+            issues.append((name, f"report stale ({age_hours:.1f}h old)"))
+        statuses = OVERALL_RE.findall(report)
+        if len(statuses) != 1:
+            issues.append((name, "report has no unambiguous OVERALL status"))
+        elif statuses[0].strip() != healthy_status:
+            details = DETAIL_RE.findall(report)
+            reason = details[0].strip() if details else statuses[0].strip()
+            issues.append((name, reason[:140]))
+    return issues
+
+
+def notify(title: str, message: str):
+    try:
+        result = subprocess.run(
+            ["notify-send", "--app-name=Workstation Maintenance", "--urgency=critical",
+             "--expire-time=15000", title, message],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Notification not delivered: {exc}", file=sys.stderr)
+        return False
+    if result.returncode != 0:
+        print(f"Notification not delivered: {result.stderr.strip()}", file=sys.stderr)
+    return result.returncode == 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--max-report-age-hours", type=float, default=48)
+    parser.add_argument("--repeat-hours", type=float, default=24)
+    parser.add_argument("--dry-run", action="store_true", help="Show decisions, do not notify or write state")
+    parser.add_argument("--test-notification", action="store_true", help="Send one explicit test notification")
+    args = parser.parse_args()
+    if args.max_report_age_hours <= 0 or args.repeat_hours <= 0:
+        parser.error("age and repeat intervals must be positive")
+    if args.test_notification:
+        return 0 if notify("Workstation alerts test", "Desktop notifications are working.") else 1
+
+    home = Path.home()
+    now = time.time()
+    issues = problems(home, args.max_report_age_hours, now)
+    state = home / ".local/state/workstation-desktop-alerts/last-alert.json"
+    if not issues:
+        print("HEALTHY: no alerts needed")
+        # Clear saved fingerprint on recovery so a recurrence raises a fresh alert.
+        if not args.dry_run:
+            state.unlink(missing_ok=True)
+        return 0
+
+    for name, reason in issues:
+        print(f"ATTENTION: {name}: {reason}")
+    fingerprint = hashlib.sha256(
+        json.dumps([(name, "stale" if reason.startswith("report stale")
+                         else "unavailable" if reason.startswith("report unavailable")
+                         else "unhealthy") for name, reason in issues],
+                   ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    previous = {}
+    try:
+        previous = json.loads(state.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        pass
+    if (previous.get("fingerprint") == fingerprint
+            and 0 <= now - float(previous.get("last_sent", 0)) < args.repeat_hours * 3600):
+        print("SUPPRESSED: same problem already notified recently")
+        return 0
+
+    title = f"Workstation attention required ({len(issues)})"
+    body = "\n".join(f"{name}: {reason}" for name, reason in issues[:3])
+    if len(issues) > 3:
+        body += f"\n... and {len(issues) - 3} more"
+    body += "\nSee ~/.local/state/workstation-*/latest.txt"
+    if args.dry_run:
+        print(f"DRY RUN: would notify: {title}\n{body}")
+        return 0
+
+    # Do not record a notification unless the desktop notification service accepted it.
+    # With no GNOME session, this may fail; a subsequent timer run will retry.
+    if not notify(title, body):
+        return 0
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"fingerprint": fingerprint, "last_sent": now}) + "\n",
+                     encoding="utf-8")
+    print("SENT: desktop notification")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

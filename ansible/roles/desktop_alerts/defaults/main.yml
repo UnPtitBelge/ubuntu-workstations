@@ -1,0 +1,5 @@
+---
+workstation_desktop_alerts_calendar: '*:0/30'
+workstation_desktop_alerts_randomized_delay: 5m
+workstation_desktop_alerts_max_report_age_hours: 48
+workstation_desktop_alerts_repeat_hours: 24

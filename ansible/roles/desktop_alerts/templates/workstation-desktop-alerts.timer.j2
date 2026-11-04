@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for workstation monitoring problems periodically
+
+[Timer]
+OnCalendar={{ workstation_desktop_alerts_calendar }}
+Persistent=true
+RandomizedDelaySec={{ workstation_desktop_alerts_randomized_delay }}
+Unit=workstation-desktop-alerts.service
+
+[Install]
+WantedBy=timers.target

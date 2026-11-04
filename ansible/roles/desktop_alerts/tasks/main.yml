@@ -1,0 +1,48 @@
+---
+- name: Install desktop notification utility
+  become: true
+  ansible.builtin.apt:
+    name: libnotify-bin
+    state: present
+
+- name: Create workstation alert directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-desktop-alerts"
+
+- name: Install desktop alert checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-desktop-alerts.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-desktop-alerts"
+    mode: '0755'
+
+- name: Install desktop alert service
+  become: false
+  ansible.builtin.template:
+    src: workstation-desktop-alerts.service.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-desktop-alerts.service"
+    mode: '0644'
+
+- name: Install desktop alert timer
+  become: false
+  ansible.builtin.template:
+    src: workstation-desktop-alerts.timer.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-desktop-alerts.timer"
+    mode: '0644'
+
+- name: Enable periodic desktop alerts
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-desktop-alerts.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode
