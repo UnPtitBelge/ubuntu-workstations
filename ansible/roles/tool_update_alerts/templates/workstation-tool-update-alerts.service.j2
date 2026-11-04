@@ -1,0 +1,6 @@
+[Unit]
+Description=Notify about available development tool updates
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workstation-tool-update-alerts --max-age-hours {{ workstation_tool_update_alerts_max_report_age_hours | int }} --repeat-hours {{ workstation_tool_update_alerts_repeat_hours | int }}

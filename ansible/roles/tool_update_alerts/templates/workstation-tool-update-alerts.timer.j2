@@ -1,0 +1,11 @@
+[Unit]
+Description=Development tool updates notification (daily retry, weekly limit)
+
+[Timer]
+OnCalendar=*-*-* 14:00:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=workstation-tool-update-alerts.service
+
+[Install]
+WantedBy=timers.target

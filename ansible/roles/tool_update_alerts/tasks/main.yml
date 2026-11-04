@@ -1,0 +1,55 @@
+---
+- name: Ensure development update alert directories exist
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-tool-update-alerts"
+  when: workstation_tool_update_alerts_enabled | bool
+
+- name: Ensure desktop notification client is installed
+  become: true
+  ansible.builtin.apt:
+    name: libnotify-bin
+    state: present
+  when: workstation_tool_update_alerts_enabled | bool
+
+- name: Install development update notification checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-tool-update-alerts.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-tool-update-alerts"
+    mode: '0755'
+  when: workstation_tool_update_alerts_enabled | bool
+
+- name: Install development update notification service
+  become: false
+  ansible.builtin.template:
+    src: workstation-tool-update-alerts.service.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-tool-update-alerts.service"
+    mode: '0644'
+  when: workstation_tool_update_alerts_enabled | bool
+
+- name: Install development update notification timer
+  become: false
+  ansible.builtin.template:
+    src: workstation-tool-update-alerts.timer.j2
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-tool-update-alerts.timer"
+    mode: '0644'
+  when: workstation_tool_update_alerts_enabled | bool
+
+- name: Enable weekly development update notifications
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-tool-update-alerts.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when:
+    - workstation_tool_update_alerts_enabled | bool
+    - not ansible_check_mode

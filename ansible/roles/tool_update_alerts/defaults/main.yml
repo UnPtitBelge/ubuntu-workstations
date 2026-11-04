@@ -1,0 +1,4 @@
+---
+workstation_tool_update_alerts_enabled: true
+workstation_tool_update_alerts_max_report_age_hours: 192
+workstation_tool_update_alerts_repeat_hours: 168
