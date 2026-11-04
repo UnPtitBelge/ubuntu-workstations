@@ -1,0 +1,14 @@
+---
+# Shared installer for pinned Proton desktop DEBs. Callers include this role
+# with `proton_desktop_app` describing the verified upstream package.
+- name: Prepare private Proton DEB cache
+  become: true
+  ansible.builtin.file:
+    path: /var/cache/ansible/proton
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install verified desktop DEB
+  ansible.builtin.include_tasks: install-deb.yml

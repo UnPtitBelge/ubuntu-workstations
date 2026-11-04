@@ -129,12 +129,12 @@ At `v1.2.0`, the `backup` role, `workstation-proton-backup.service`, backup moni
 - For mise/rustup/uv migrations, move version declarations into reviewed inventory/config before changing installed versions; test `node`, `java`, `rustc`, Python and installed CLI tools.
 - Container runtime swaps require an inventory of Compose projects, networks and **persistent volumes**; image export alone does not preserve volume data. Plan application downtime and service-level validation.
 
-## 5. Proposed plug-and-play contracts (not yet implemented)
+## 5. Plug-and-play contracts (schema implemented; more adapters planned)
 
-The main playbook should select capabilities and providers, not directly bind monitoring to Proton-specific units.
+The main playbook now selects capabilities and providers (`workstation_capabilities`, `workstation_providers` in `group_vars/all.yml`) and dispatches to `ansible/roles/providers/<provider>/`; the built-in adapters today are the Proton and Syncthing ones plus the guidance-only `custom`. Adding another provider = a new role directory, no playbook edit. Monitoring consumes normalized records (`status.json` for backup, `latest.txt` with an `OVERALL` line for the rest), so it does not bind to Proton-specific units.
 
 ```yaml
-# PROPOSED example only — currently unsupported in v1.2.0
+# Active schema (defaults reproduce the original Proton + Syncthing setup)
 workstation_capabilities:
   backup: {enabled: true}
   sync: {enabled: true}

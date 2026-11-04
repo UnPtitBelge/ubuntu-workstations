@@ -1,4 +1,8 @@
 ---
+- name: Configure Proton Drive CLI
+  ansible.builtin.import_tasks: drive-cli.yml
+  when: workstation_proton_drive_enabled | bool
+
 - name: Detect deployed Proton backup timer when backups disabled
   ansible.builtin.stat:
     path: "{{ ansible_facts['env']['HOME'] }}/.config/systemd/user/workstation-proton-backup.timer"

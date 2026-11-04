@@ -3,6 +3,81 @@
   hosts: workstations
   gather_facts: true
 
+  pre_tasks:
+    - name: Discover available provider roles
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../roles/providers"
+        file_type: directory
+      register: workstation_provider_role_dirs
+
+    - name: Validate that every selected provider role exists
+      ansible.builtin.assert:
+        that:
+          - workstation_providers[item.key] in workstation_available_providers
+        fail_msg: >-
+          Unknown provider '{{ workstation_providers[item.key] }}' for capability '{{ item.key }}'.
+          Available providers: {{ workstation_available_providers | join(', ') }}.
+          Create ansible/roles/providers/{{ workstation_providers[item.key] }}/ in your clone
+          or select an available provider (use 'none' to skip a capability).
+      vars:
+        workstation_available_providers: "{{ workstation_provider_role_dirs.files | map(attribute='path') | map('basename') | list }}"
+      loop: "{{ workstation_capabilities | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when:
+        - item.value.enabled | default(true) | bool
+        - workstation_providers[item.key] | default('') != 'none'
+
+    # Capability/provider selection (defaults reproduce the original Proton +
+    # Syncthing setup). include_role is used so a skipped or 'none' provider
+    # never resolves a missing role name.
+    - name: Select sync provider
+      ansible.builtin.include_role:
+        name: "providers/{{ workstation_providers.sync | default('syncthing') }}"
+      vars:
+        workstation_capability: sync
+      when:
+        - workstation_capabilities.sync.enabled | default(true) | bool
+        - workstation_providers.sync | default('syncthing') != 'none'
+        - workstation_syncthing_enabled | default(true) | bool
+
+    - name: Select vpn provider
+      ansible.builtin.include_role:
+        name: "providers/{{ workstation_providers.vpn | default('proton_vpn') }}"
+      vars:
+        workstation_capability: vpn
+      when:
+        - workstation_capabilities.vpn.enabled | default(true) | bool
+        - workstation_providers.vpn | default('proton_vpn') != 'none'
+
+    - name: Select backup provider
+      ansible.builtin.include_role:
+        name: "providers/{{ workstation_providers.backup | default('proton_drive') }}"
+      vars:
+        workstation_capability: backup
+      when:
+        - workstation_capabilities.backup.enabled | default(true) | bool
+        - workstation_providers.backup | default('proton_drive') != 'none'
+        - workstation_backup_enabled | default(true) | bool
+
+    - name: Select passwords provider
+      ansible.builtin.include_role:
+        name: "providers/{{ workstation_providers.passwords | default('proton_pass') }}"
+      vars:
+        workstation_capability: passwords
+      when:
+        - workstation_capabilities.passwords.enabled | default(true) | bool
+        - workstation_providers.passwords | default('proton_pass') != 'none'
+
+    - name: Select mail provider
+      ansible.builtin.include_role:
+        name: "providers/{{ workstation_providers.mail | default('proton_mail') }}"
+      vars:
+        workstation_capability: mail
+      when:
+        - workstation_capabilities.mail.enabled | default(true) | bool
+        - workstation_providers.mail | default('proton_mail') != 'none'
+
   roles:
     - hardware
     - base
@@ -15,19 +90,17 @@
     - role: gnome
       when: workstation_hardware_has_gnome_session | default(false) | bool
 
-    - syncthing
-    - proton
-    - backup
     - maintenance
 
     - health
     - drift
-    
+
     - role: backup_monitor
       when:
-        - workstation_backup_enabled | default(false) | bool
+        - workstation_capabilities.backup.enabled | default(true) | bool
+        - workstation_backup_enabled | default(true) | bool
         - workstation_backup_timer_enabled | default(false) | bool
-    
+
     - weekly_report
     - desktop_alerts
     - tool_updates

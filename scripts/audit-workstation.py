@@ -77,8 +77,14 @@ def main():
         names = sorted(p.name for p in roles.iterdir() if p.is_dir())
         rep.add("info", "Roles: " + (", ".join(names) if names else "none"))
         for role in roles.iterdir():
-            if role.is_dir() and not (role / "tasks" / "main.yml").is_file():
-                rep.add("warnings", f"{role.relative_to(root)} has no tasks/main.yml")
+            if not role.is_dir():
+                continue
+            if (role / "tasks" / "main.yml").is_file():
+                continue
+            # Namespace directories (e.g. roles/providers/) hold roles one level deeper.
+            if any((child / "tasks" / "main.yml").is_file() for child in role.iterdir() if child.is_dir()):
+                continue
+            rep.add("warnings", f"{role.relative_to(root)} has no tasks/main.yml")
 
     # Inventory duplication: overlapping variable *names* are reported, not values.
     var_paths = []

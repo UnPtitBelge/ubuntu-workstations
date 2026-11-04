@@ -6,7 +6,7 @@ Run from the repository root. Does not run Ansible or modify user services.
 from pathlib import Path
 import sys
 
-path = Path('ansible/roles/backup/tasks/main.yml')
+path = Path('ansible/roles/providers/proton_drive/tasks/main.yml')
 if not path.is_file():
     sys.exit(f'ERROR: {path} not found. Run from repository root.')
 text = path.read_text(encoding='utf-8')

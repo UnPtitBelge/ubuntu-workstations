@@ -1,0 +1,28 @@
+---
+- name: Validate architecture for Proton Pass
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] == 'x86_64'
+    fail_msg: 'The pinned Proton Pass DEB requires amd64 (x86_64).'
+  when: workstation_proton_pass_enabled | default(true) | bool
+
+- name: Explain Proton Pass check mode
+  ansible.builtin.debug:
+    msg: >-
+      Proton Pass: package download, inspection and installation are
+      skipped in check mode. Run the playbook normally to converge.
+  when: ansible_check_mode
+
+- name: Ensure Proton Pass is installed at or above the approved version
+  ansible.builtin.include_role:
+    name: providers/proton_deb
+  vars:
+    proton_desktop_app:
+      name: Proton Pass
+      version: '1.43.0'
+      url: https://proton.me/download/pass/linux/proton-pass_1.43.0_amd64.deb
+      sha512: ac19002dd7e5e6110fd5ca5d342d2cacbd2528d95966e83c1ac8df928e86506927d9cad1ffafaa1b542bb6ebf13aaa8f7b5e6d6499531a62aa82bbf82a706c62
+      filename: proton-pass_1.43.0_amd64.deb
+  when:
+    - workstation_proton_pass_enabled | default(true) | bool
+    - not ansible_check_mode

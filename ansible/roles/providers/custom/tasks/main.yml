@@ -1,0 +1,18 @@
+---
+# Guidance-only provider: the user supplies their own implementation by
+# dropping a role at ansible/roles/providers/<name>/ and selecting it via
+# workstation_providers.<capability>: <name>. Contract: docs/MIGRATE.md section 5.
+- name: Explain the custom provider contract
+  ansible.builtin.debug:
+    msg: >-
+      Capability '{{ workstation_capability | default('unknown') }}' uses provider 'custom':
+      no built-in implementation is deployed. To use your own (self-hosted VPS,
+      other vendor, ...), create ansible/roles/providers/<name>/ in your clone
+      and set workstation_providers.{{ workstation_capability | default('?') }}: <name>.
+      Provider contract (docs/MIGRATE.md section 5): implement install/configure/health;
+      implement export/import/verify only where the backend supports them and mark
+      them manual otherwise. Health output: ~/.local/state/workstation-<capability>/latest.txt
+      with exactly one OVERALL line (register it in workstation_report_sources).
+      Backup providers must additionally write
+      ~/.local/state/workstation-backup/status.json (schema in docs/MIGRATE.md section 5).
+      Secrets (tokens, keys, app passwords) stay in ~/.config or the keyring — never in Git.

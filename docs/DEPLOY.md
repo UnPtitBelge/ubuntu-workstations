@@ -85,10 +85,9 @@ mkdir -p ~/Projects
 8. **Validate:** Strict audit, timers, lingering, notification delivery in GNOME, backup freshness, health and drift reports, then idempotency.
 9. **Record the host:** Document supported hardware, selected capabilities, recovery contacts/locations (not secrets), and known exceptions. Commit only reviewed nonsecret host configuration.
 
-Example inventory variables below are **design sketches**, not supported by the current roles:
+The capability/provider schema below is **implemented** (defaults reproduce the original Proton + Syncthing setup); provider adapters beyond the built-ins in `ansible/roles/providers/` are still future work:
 
 ```yaml
-# PROPOSED future profile, NOT active v1.2.0 schema
 workstation_profile: developer_gnome
 workstation_capabilities:
   shell: {enabled: true}
@@ -110,15 +109,17 @@ workstation_backup_destination: "<computed/validated per-host destination>"
 
 Do not put plaintext access tokens, password-vault exports, recovery phrases or provider session databases in inventory YAML.
 
-## 4. Target architecture for generic deployments (not implemented)
+## 4. Target architecture for generic deployments (schema implemented; more adapters planned)
 
 ```text
 Profiles (developer_gnome, headless, lightweight ...)
   └── Capabilities (backup, sync, vpn, mail, passwords, containers ...)
-       └── Selected providers (proton_drive, another_backup, syncthing, ...)
+       └── Selected providers (proton_drive, rclone_gdrive, syncthing, custom, ...)
             └── Implementation adapters (install/configure/health/export/import)
                  └── Normalized monitoring and migration metadata
 ```
+
+The selection is implemented in `ansible/inventory/group_vars/all.yml` (`workstation_capabilities`, `workstation_providers`) and dispatched in `ansible/playbooks/workstation.yml` to roles under `ansible/roles/providers/<provider>/`. Built-in providers today: `proton_drive`, `syncthing`, `proton_vpn`, `proton_mail`, `proton_pass`, and the guidance-only `custom`. To add your own (self-hosted VPS, another vendor), create `ansible/roles/providers/<name>/` in your clone and set `workstation_providers.<capability>: <name>` — no playbook edit needed. Set a provider to `none` to skip a capability.
 
 ### Capability contracts
 

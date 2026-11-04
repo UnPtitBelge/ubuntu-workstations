@@ -96,7 +96,7 @@ The tree above describes the intended v1.2.0 layout; optional assets and documen
 
 ## Portability roadmap
 
-The existing v1.2.0 configuration is **tested on two named Ubuntu workstations**; it is not yet a universal installer or fully provider-independent. In particular, Proton backup implementation and monitoring are provider-coupled. The next architectural goal is to separate **capabilities** (backup, sync, VPN, mail, passwords) from **providers** (such as Proton Drive or another backup service), while keeping per-host secrets and data migration explicit.
+The configuration is **tested on two named Ubuntu workstations** and is not yet a universal installer. Capabilities (backup, sync, VPN, mail, passwords) are now separated from **providers** via `workstation_capabilities` / `workstation_providers` (see [DEPLOY.md](docs/DEPLOY.md) §4): the playbook dispatches to `ansible/roles/providers/<provider>/`, with Proton/Syncthing built-ins reproducing the original setup and a `custom` escape hatch — drop your own role in `providers/<name>/` and select it by name. Additional provider adapters (Google via rclone/Thunderbird, self-hosted VPS stacks, …) are the next step; per-host secrets and data migration remain explicit (see [MIGRATE.md](docs/MIGRATE.md)).
 
 - **[DEPLOY.md](docs/DEPLOY.md):** deploy an existing host today; design and acceptance criteria for new generic workstations.
 - **[MIGRATE.md](docs/MIGRATE.md):** inventory, export/import, verification, cutover and rollback when replacing any provider or tool.

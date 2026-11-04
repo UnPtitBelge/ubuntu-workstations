@@ -1,0 +1,3 @@
+---
+# Set by the playbook when this provider is selected for a capability.
+workstation_capability: ""

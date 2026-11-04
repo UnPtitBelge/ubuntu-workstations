@@ -1,0 +1,28 @@
+---
+- name: Validate architecture for Proton Mail
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] == 'x86_64'
+    fail_msg: 'The pinned Proton Mail DEB requires amd64 (x86_64).'
+  when: workstation_proton_mail_enabled | default(true) | bool
+
+- name: Explain Proton Mail check mode
+  ansible.builtin.debug:
+    msg: >-
+      Proton Mail: package download, inspection and installation are
+      skipped in check mode. Run the playbook normally to converge.
+  when: ansible_check_mode
+
+- name: Ensure Proton Mail is installed at or above the approved stable version
+  ansible.builtin.include_role:
+    name: providers/proton_deb
+  vars:
+    proton_desktop_app:
+      name: Proton Mail
+      version: '1.14.0'
+      url: https://proton.me/download/mail/linux/1.14.0/ProtonMail-desktop-beta.deb
+      sha512: 5908632fe34e3d40b698c9459bb774428a5b6aedd7c89ed9ff68394b90227c689a5a03ee719f9b3a4e20c7c4a69ce67fe40ab12e0f344359e9005c7be839d818
+      filename: proton-mail_1.14.0_amd64.deb
+  when:
+    - workstation_proton_mail_enabled | default(true) | bool
+    - not ansible_check_mode

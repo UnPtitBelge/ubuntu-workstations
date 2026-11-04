@@ -13,6 +13,21 @@ workstation_backup_remote_parent: "/my-files/Workstation-Backups/{{ ansible_fact
 # monitor. Safe charset only: letters, digits, dot, underscore, dash.
 workstation_backup_dataset_id: home-selected
 
+# Proton Drive CLI installed by this provider role (used by the backup script).
+workstation_proton_drive_enabled: true
+workstation_proton_drive_version: "0.9.0"
+
+workstation_proton_drive_platforms:
+  x86_64:
+    directory: linux-x64
+    sha512: >-
+      3533025ba69ae112b64e3e01fbcc1ad0688136a4043f6cf6a72886967d85fdcd9ec235479c2e113171614be5225bfba93427509a05ca5aa6071d924fa7e91ca8
+
+  aarch64:
+    directory: linux-arm64
+    sha512: >-
+      c8d5a6b174e57f06d05cb5483400b9963faf58e743b6b33706bb73ecff718047ffce6b439994255b94b5b226b90d2e91bef7418ec96c1c3f5d8bf39b6cd01321
+
 # Complete folders are uploaded, preserving their folder names at destination.
 workstation_backup_sources:
   - "{{ ansible_facts['env']['HOME'] }}/Documents"
