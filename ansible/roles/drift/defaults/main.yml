@@ -1,0 +1,11 @@
+---
+# Phase 30.3 monitors only this explicit allowlist of managed files.
+workstation_drift_targets:
+  - label: Ubuntu unattended security update policy
+    path: /etc/apt/apt.conf.d/90-workstation-security-updates
+  - label: Workstation health checker
+    path: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-health-check"
+  - label: Health check systemd service
+    path: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-health.service"
+  - label: Health check systemd timer
+    path: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-health.timer"

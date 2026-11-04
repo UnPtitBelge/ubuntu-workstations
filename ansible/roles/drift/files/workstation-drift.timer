@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily workstation configuration drift check
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=45m
+Unit=workstation-drift.service
+
+[Install]
+WantedBy=timers.target

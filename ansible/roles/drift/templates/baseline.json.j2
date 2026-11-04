@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "description": "Baseline generated after Ansible workstation provisioning. Re-running Ansible refreshes it.",
+  "files": [
+{% for result in workstation_drift_file_stats.results %}
+    {"label": {{ result.item.label | to_json }}, "path": {{ result.item.path | to_json }}, "sha256": {{ (result.stat.checksum | default('')) | to_json }}}{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

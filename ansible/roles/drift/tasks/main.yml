@@ -1,0 +1,75 @@
+---
+- name: Create drift monitoring directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ lookup('env', 'HOME') }}/.local/bin"
+    - "{{ lookup('env', 'HOME') }}/.config/systemd/user"
+    - "{{ lookup('env', 'HOME') }}/.local/state/workstation-drift"
+
+- name: Inspect Ansible-managed files after provisioning
+  become: true
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: "{{ workstation_drift_targets }}"
+  loop_control:
+    label: "{{ item.label }}"
+  register: workstation_drift_file_stats
+
+- name: Refuse to baseline missing managed files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+      - item.stat.checksum is defined
+    fail_msg: >-
+      Expected managed file missing or unreadable: {{ item.item.path }}.
+      Check the earlier maintenance/health roles and drift target paths.
+  loop: "{{ workstation_drift_file_stats.results }}"
+  loop_control:
+    label: "{{ item.item.label }}"
+  when: not ansible_check_mode
+
+- name: Write drift baseline from successfully provisioned files
+  become: false
+  ansible.builtin.template:
+    src: baseline.json.j2
+    dest: "{{ lookup('env', 'HOME') }}/.local/state/workstation-drift/baseline.json"
+    mode: '0644'
+  when: not ansible_check_mode
+
+- name: Install read-only drift checker
+  become: false
+  ansible.builtin.copy:
+    src: workstation-drift-check.py
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin/workstation-drift-check"
+    mode: '0755'
+
+- name: Install drift systemd service
+  become: false
+  ansible.builtin.copy:
+    src: workstation-drift.service
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-drift.service"
+    mode: '0644'
+
+- name: Install drift systemd timer
+  become: false
+  ansible.builtin.copy:
+    src: workstation-drift.timer
+    dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/workstation-drift.timer"
+    mode: '0644'
+
+- name: Enable daily workstation drift checks
+  become: false
+  ansible.builtin.systemd_service:
+    name: workstation-drift.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode
