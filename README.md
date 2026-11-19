@@ -1,5 +1,10 @@
 # Ubuntu Workstations
 
+> [!IMPORTANT]
+> **Archived (November 2026), no longer maintained.** These workstations are now
+> managed by a private, chezmoi-based setup. This repository stays available as a
+> reference for its Ansible roles and documentation.
+
 Personal Ubuntu 26.04 LTS workstations managed with Ansible and Git. The default
 setup includes GNOME, Fish/Ghostty, development tools, Docker, virtualization,
 Syncthing, Proton applications, cloud backups and maintenance jobs.
